@@ -1,4 +1,4 @@
-cs426-fall13
+cs425-fall13
 ============
 
-Zach and Tom's Repo for MPs in CS 436 for Fall 2013
+Zach and Tom's Repo for MPs in CS 425 for Fall 2013
