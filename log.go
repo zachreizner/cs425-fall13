@@ -1,10 +1,10 @@
 package main
 
-import "strconv"
-import "time"
 import "errors"
-import "strings"
 import "fmt"
+import "strconv"
+import "strings"
+import "time"
 
 type Log struct {
     TimeStamp time.Time
