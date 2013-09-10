@@ -12,7 +12,13 @@ type Log struct {
 }
 
 // Reads and returns just one log in the reader.
-func ReadLog(s string) (*Log, error) {
+func ReadLog(r io.Reader) (*Log, error) {
+    logReader := bufio.NewReader(r)
+    logLine, err := logReader.ReadString('\n')
+    // If we did not reach the end of the fle
+    if err != io.EOF {
+        logLine = logLine[:len(logLine) - 1] // Strip the newline
+    }
     logParts := strings.SplitN(s, "|", 2)
     if len(logParts) != 2 {
         return nil, errors.New("invalid log: no key")
