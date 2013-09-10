@@ -5,6 +5,8 @@ import "fmt"
 import "strconv"
 import "strings"
 import "time"
+import "io"
+import "bufio"
 
 type Log struct {
     TimeStamp time.Time
@@ -19,7 +21,7 @@ func ReadLog(r io.Reader) (*Log, error) {
     if err != io.EOF {
         logLine = logLine[:len(logLine) - 1] // Strip the newline
     }
-    logParts := strings.SplitN(s, "|", 2)
+    logParts := strings.SplitN(logLine, "|", 2)
     if len(logParts) != 2 {
         return nil, errors.New("invalid log: no key")
     }
