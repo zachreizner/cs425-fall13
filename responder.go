@@ -8,8 +8,7 @@ import (
     "encoding/binary"
 )
 
-func HandleQuery(connection io.ReadWriteCloser, logfile io.Reader) {
-
+func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
     var size uint32
     binary.Read(connection, binary.BigEndian, &size)
     str_buf := make([]byte, size)

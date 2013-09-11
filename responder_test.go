@@ -1,37 +1,19 @@
 package main
 
 import (
-    "testing"
-    "encoding/binary"
     "bytes"
+    "encoding/binary"
     "strings"
+    "testing"
 )
-
-type BufferCloser struct {
-    buf *bytes.Buffer
-    closed bool
-}
-
-
-func (b BufferCloser) Read(p []byte) (n int, err error) {
-    return b.buf.Read(p)
-}
-
-func (b BufferCloser) Write(p []byte) (n int, err error) {
-    return b.buf.Write(p)
-}
-
-func (b BufferCloser) Close() error {
-    b.closed = true
-    return nil
-}
 
 func TestHandleQuery(t *testing.T) {
     var buf bytes.Buffer
     binary.Write(&buf, binary.BigEndian, uint32(5))
     buf.WriteString("hello")
     logFile := strings.NewReader("123|hello")
-    HandleQuery(BufferCloser{buf: &buf}, logFile)
+
+    HandleQuery(&buf, logFile)
 
     var status uint8
     binary.Read(&buf, binary.BigEndian, &status)
