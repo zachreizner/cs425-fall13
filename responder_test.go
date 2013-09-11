@@ -4,14 +4,8 @@ import (
     "testing"
     "encoding/binary"
     "bytes"
-    "io"
     "strings"
 )
-
-// Remove this when you implement it
-func HandleQuery(connection io.ReadWriteCloser, logfile io.Reader) {
-
-}
 
 type BufferCloser struct {
     buf *bytes.Buffer
