@@ -43,3 +43,33 @@ func TestHandleQuery(t *testing.T) {
         return
     }
 }
+
+func TestProtocol(t *testing.T) {
+    var buf bytes.Buffer
+    logFile := strings.NewReader("123|hello")
+
+    req, err := NewRequest(&buf, "hello")
+    if err != nil {
+        t.Errorf("requester returned error: %v", err)
+        return
+    }
+
+    HandleQuery(&buf, logFile)
+
+    log, err := req.NextLog()
+    if err != nil {
+        t.Errorf("requester returned error instead of log: %v", err)
+        return
+    }
+
+    if log.TimeStamp.UnixNano() != 123 {
+        t.Errorf("returned log time stamp expected %v; was actually %v", 123, log.TimeStamp.UnixNano())
+        return
+    }
+
+    _, err = req.NextLog()
+    if err == nil {
+        t.Errorf("responder returned too many logs")
+        return
+    }
+}
