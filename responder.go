@@ -11,7 +11,7 @@ import (
 func HandleQuery(connection io.ReadWriteCloser, logfile io.Reader) {
 
     var size uint32
-    binary.Read(connection, binary.BigEndian, size)
+    binary.Read(connection, binary.BigEndian, &size)
     str_buf := make([]byte, size)
     read_bytes, err := connection.Read(str_buf)
     if uint32(read_bytes) != size {
@@ -38,12 +38,13 @@ func HandleQuery(connection io.ReadWriteCloser, logfile io.Reader) {
             return
         }
 
+
         if QueryLog(*log, query) {
             contSignal := uint8(1)
             binary.Write(connection, binary.BigEndian, contSignal)
-            binary.Write(connection, binary.BigEndian, log.TimeStamp)
+            binary.Write(connection, binary.BigEndian, log.TimeStamp.UnixNano())
             binary.Write(connection, binary.BigEndian, uint32(len(log.Message)))
-            binary.Write(connection, binary.BigEndian, log.Message)
+            fmt.Fprintf(connection, log.Message)
         }
     }
 }

@@ -40,7 +40,7 @@ func TestHandleQuery(t *testing.T) {
         return
     }
 
-    var timeStamp int32
+    var timeStamp int64
     var logSize uint32
     binary.Read(&buf, binary.BigEndian, &timeStamp)
     binary.Read(&buf, binary.BigEndian, &logSize)
