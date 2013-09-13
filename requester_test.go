@@ -27,7 +27,7 @@ func TestNextLog(t *testing.T) {
         t.Error("Recieved wrong string")
     }
 
-    // yeah... these tests are pretty bad...
+    // clear the buffer, request thinks it can write to it
     buf.Reset()
 
     // log 0
@@ -35,14 +35,12 @@ func TestNextLog(t *testing.T) {
     binary.Write(&buf, binary.BigEndian, int64(42))
     binary.Write(&buf, binary.BigEndian, uint32(5))
     fmt.Fprintf(&buf, "hello")
-    //buf.WriteString("hello")
 
     // log 1
     binary.Write(&buf, binary.BigEndian, int8(1))
     binary.Write(&buf, binary.BigEndian, int64(45))
     binary.Write(&buf, binary.BigEndian, uint32(14))
     fmt.Fprintf(&buf, "whales are fun")
-    //buf.WriteString("whales are fun")
 
     binary.Write(&buf, binary.BigEndian, int8(0))
 

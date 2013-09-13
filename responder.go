@@ -8,6 +8,8 @@ import (
     "encoding/binary"
 )
 
+// HandleQuery takes a connection to a process and handles
+// requests, and responds to the remote connection.
 func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
     var size uint32
     binary.Read(connection, binary.BigEndian, &size)
@@ -49,6 +51,7 @@ func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
     }
 }
 
+// Handles requests for connections for queries.
 func ListenForQueries(listener net.Listener, logfile string) {
     for {
         conn, err := listener.Accept()
