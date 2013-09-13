@@ -55,11 +55,11 @@ func runPrompt(quit chan int) {
 }
 
 func main() {
-    flag.Parse()
-
     // The most important part of the program...
     fmt.Println("LogProUltraPrime 0.5 (RC1)")
     fmt.Println("Copyright 2013 SickNasty Productions LLC.\n")
+
+    flag.Parse()
 
     quit := make(chan int)
     go runListener(quit)

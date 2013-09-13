@@ -25,8 +25,9 @@ func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
 
     query := string(str_buf)
 
+    logReader := NewLogReader(logfile)
     for {
-        log, err := ReadLog(logfile)
+        log, err := logReader.ReadLog()
         if err != nil {
             terminateSignal := uint8(0)
             writeErr := binary.Write(connection, binary.BigEndian, terminateSignal)

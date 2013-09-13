@@ -9,7 +9,9 @@ import (
 func TestReadLog(t *testing.T) {
     logFile := strings.NewReader("123|hello\n456|world\n")
 
-    log, err := ReadLog(logFile)
+    logReader := NewLogReader(logFile)
+
+    log, err := logReader.ReadLog()
 
     if err != nil {
         t.Error("Errored while reading first log\n", err)
@@ -23,10 +25,10 @@ func TestReadLog(t *testing.T) {
         t.Error("Wrong message. Should be \"hello\", got: ", log.Message)
     }
 
-    log, err = ReadLog(logFile)
+    log, err = logReader.ReadLog()
 
     if err != nil {
-        t.Error("Errored while reading first log\n", err)
+        t.Error("Errored while reading second log\n", err)
     }
 
     if log.TimeStamp.UnixNano() != 456 {
@@ -37,7 +39,7 @@ func TestReadLog(t *testing.T) {
         t.Error("Wrong message. Should be \"world\", got: ", log.Message)
     }
 
-    _, err = ReadLog(logFile)
+    _, err = logReader.ReadLog()
 
     if err != io.EOF {
         t.Error("Did not recieve EOF at last log.\n Error:", err)
