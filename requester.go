@@ -53,10 +53,6 @@ func (r *Request) NextLog() (*Log, error) {
             return nil, err
         }
 
-        if err := binary.Read(req, binary.BigEndian, &r.status); err != nil {
-            return nil, err
-        }
-
         return &Log{time.Unix(0, timeStamp), string(logMessage)}, nil
     }
 
