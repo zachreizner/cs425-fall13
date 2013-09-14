@@ -32,7 +32,7 @@ func runRequest(host string, query string, output chan *Log) {
 
     conn, err := net.Dial("tcp", host)
     if err != nil {
-        fmt.Println("failed to dial %v: %v\n", host, err)
+        fmt.Printf("failed to dial %v: %v\n", host, err)
         return
     }
 
