@@ -7,7 +7,7 @@ import (
 )
 
 func TestReadLog(t *testing.T) {
-    logFile := strings.NewReader("123|hello\n456|world\n")
+    logFile := strings.NewReader("123:hello\n456:world\n")
 
     logReader := NewLogReader(logFile)
 
@@ -17,7 +17,7 @@ func TestReadLog(t *testing.T) {
         t.Error("Errored while reading first log\n", err)
     }
 
-    if log.TimeStamp.UnixNano() != 123 {
+    if log.Key != "123" {
         t.Error("Wrong time in first log")
     }
 
@@ -31,7 +31,7 @@ func TestReadLog(t *testing.T) {
         t.Error("Errored while reading second log\n", err)
     }
 
-    if log.TimeStamp.UnixNano() != 456 {
+    if log.Key != "456" {
         t.Error("Wrong time in first log")
     }
 

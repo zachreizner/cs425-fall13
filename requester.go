@@ -3,7 +3,6 @@ package main
 import (
     "encoding/binary"
     "io"
-    "time"
 )
 
 type Request struct {
@@ -36,10 +35,16 @@ func (r *Request) NextLog() (*Log, error) {
             return nil, io.EOF
         }
 
-        var timeStamp int64
+        var keySize uint32
         var logSize uint32
 
-        if err := binary.Read(req, binary.BigEndian, &timeStamp); err != nil {
+        if err := binary.Read(req, binary.BigEndian, &keySize); err != nil {
+            return nil, err
+        }
+
+        logKey := make([]byte, keySize)
+
+        if _, err := req.Read(logKey); err != nil {
             return nil, err
         }
 
@@ -53,7 +58,7 @@ func (r *Request) NextLog() (*Log, error) {
             return nil, err
         }
 
-        return &Log{time.Unix(0, timeStamp), string(logMessage)}, nil
+        return &Log{string(logKey), string(logMessage)}, nil
     }
 
     return nil, io.EOF

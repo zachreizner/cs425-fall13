@@ -32,13 +32,14 @@ func TestNextLog(t *testing.T) {
 
     // log 0
     binary.Write(&buf, binary.BigEndian, int8(1))
-    binary.Write(&buf, binary.BigEndian, int64(42))
+    binary.Write(&buf, binary.BigEndian, uint32(0))
     binary.Write(&buf, binary.BigEndian, uint32(5))
     fmt.Fprintf(&buf, "hello")
 
     // log 1
     binary.Write(&buf, binary.BigEndian, int8(1))
-    binary.Write(&buf, binary.BigEndian, int64(45))
+    binary.Write(&buf, binary.BigEndian, uint32(1))
+    fmt.Fprintf(&buf, "a")
     binary.Write(&buf, binary.BigEndian, uint32(14))
     fmt.Fprintf(&buf, "whales are fun")
 
@@ -50,7 +51,7 @@ func TestNextLog(t *testing.T) {
         t.Error("failed to get log", err)
     }
 
-    if log.TimeStamp.UnixNano() != 42 {
+    if log.Key != "" {
         t.Error("Wrong time on log")
     }
 
@@ -63,7 +64,7 @@ func TestNextLog(t *testing.T) {
         t.Error("failed to get log", err)
     }
 
-    if log.TimeStamp.UnixNano() != 45 {
+    if log.Key != "a" {
         t.Error("Wrong time on log")
     }
 

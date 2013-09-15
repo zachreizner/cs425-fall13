@@ -44,7 +44,8 @@ func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
         if QueryLog(*log, query) {
             contSignal := uint8(1)
             binary.Write(connection, binary.BigEndian, contSignal)
-            binary.Write(connection, binary.BigEndian, log.TimeStamp.UnixNano())
+            binary.Write(connection, binary.BigEndian, uint32(len(log.Key)))
+            fmt.Fprintf(connection, log.Key)
             binary.Write(connection, binary.BigEndian, uint32(len(log.Message)))
             fmt.Fprintf(connection, log.Message)
         }

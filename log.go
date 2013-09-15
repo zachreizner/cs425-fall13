@@ -3,15 +3,12 @@ package main
 import  (
     "bufio"
     "errors"
-    "fmt"
     "io"
-    "strconv"
     "strings"
-    "time"
 )
 
 type Log struct {
-    TimeStamp time.Time
+    Key string
     Message string
 }
 
@@ -39,16 +36,10 @@ func (r *LogReader) ReadLog() (*Log, error) {
     }
 
     // Split the log into its parameters
-    logParts := strings.SplitN(logLine, "|", 2)
+    logParts := strings.SplitN(logLine, ":", 2)
     if len(logParts) != 2 {
         return nil, errors.New("invalid log: no key")
     }
 
-    // Parse the timespace which is measured in nanoseconds since Unix Epoch.
-    timeStampNano, err := strconv.ParseInt(logParts[0], 10, 64)
-    if err != nil {
-        return nil, fmt.Errorf("invalid key time stamp: %v", err)
-    }
-
-    return &Log{time.Unix(0, timeStampNano), logParts[1]}, nil
+    return &Log{logParts[0], logParts[1]}, nil
 }

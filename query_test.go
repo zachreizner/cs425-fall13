@@ -2,11 +2,6 @@ package main
 
 import "testing"
 
-// Remove this when you actual implement it
-func QueryLog(l Log, query string) bool {
-    return false
-}
-
 func testQueryMatch(t *testing.T, message string, query string) {
     l := Log{
         Message: message,
