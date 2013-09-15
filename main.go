@@ -7,6 +7,7 @@ import (
     "net"
     "os"
     "strings"
+    "time"
 )
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening for log queries")
@@ -27,7 +28,13 @@ func runListener(quit chan int) {
     }
 }
 
-func runRequest(host string, query string, output chan *Log) {
+// Just a log with origin information
+type HostLog struct {
+    host string
+    log *Log
+}
+
+func runRequest(host string, query string, output chan *HostLog) {
     defer func() { output <- nil }() // Signal this request has finished
 
     conn, err := net.Dial("tcp", host)
@@ -44,16 +51,18 @@ func runRequest(host string, query string, output chan *Log) {
 
     log, err := req.NextLog()
     for err == nil {
-        output <- log
+        output <- &HostLog{host, log}
         log, err = req.NextLog()
     }
 }
 
 func runPrompt(quit chan int) {
     defer func() { quit <- 1 }() // Signal this prompt has finished
+
     if *batch {
         return
     }
+
     hosts := strings.Split(*hostsList, ",")
     promptReader := bufio.NewReader(os.Stdin)
     for {
@@ -70,7 +79,9 @@ func runPrompt(quit chan int) {
             continue
         }
 
-        requestOutput := make(chan *Log)
+        queryStartTime := time.Now()
+
+        requestOutput := make(chan *HostLog)
         aliveRequests := 0
         for _,host := range hosts {
             aliveRequests++
@@ -82,9 +93,11 @@ func runPrompt(quit chan int) {
             if log == nil {
                 aliveRequests--
             } else {
-                fmt.Println(log.Message)
+                fmt.Printf("%v: %v\n", log.host, log.log.Message)
             }
         }
+
+        fmt.Println("query finished; took", time.Since(queryStartTime))
     }
 }
 
@@ -97,9 +110,11 @@ func main() {
 
     quit := make(chan int)
 
+    // Run the listener and prompt concurrently
     go runListener(quit)
     go runPrompt(quit)
 
+    // Wait for both to exit
     <-quit
     <-quit
 }
