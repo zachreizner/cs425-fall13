@@ -48,7 +48,6 @@ func (r *Request) NextLog() (*Log, error) {
         index := uint32(0)
 
         for index < keySize {
-            fmt.Println("start reading string")
             readSize, err := req.Read(logKey[index:keySize])
             if err != nil {
                 fmt.Println("string read error")
@@ -63,8 +62,14 @@ func (r *Request) NextLog() (*Log, error) {
 
         logMessage := make([]byte, logSize)
 
-        if _, err := req.Read(logMessage); err != nil {
-            return nil, err
+        index = 0
+        for index < logSize {
+            readSize, err := req.Read(logMessage[index: logSize])
+            if err != nil {
+                fmt.Println("value read error")
+                return nil, err
+            }
+            index += uint32(readSize)
         }
 
         return &Log{string(logKey), string(logMessage)}, nil
