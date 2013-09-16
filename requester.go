@@ -1,6 +1,7 @@
 package main
 
 import (
+    "fmt"
     "encoding/binary"
     "io"
 )
@@ -44,8 +45,16 @@ func (r *Request) NextLog() (*Log, error) {
 
         logKey := make([]byte, keySize)
 
-        if _, err := req.Read(logKey); err != nil {
-            return nil, err
+        index := uint32(0)
+
+        for index < keySize {
+            fmt.Println("start reading string")
+            readSize, err := req.Read(logKey[index:keySize])
+            if err != nil {
+                fmt.Println("string read error")
+                return nil, err
+            }
+            index += uint32(readSize)
         }
 
         if err := binary.Read(req, binary.BigEndian, &logSize); err != nil {

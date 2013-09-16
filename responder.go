@@ -42,12 +42,14 @@ func HandleQuery(connection io.ReadWriter, logfile io.Reader) {
 
 
         if QueryLog(*log, query) {
+            fmt.Println("Start send log")
             contSignal := uint8(1)
             binary.Write(connection, binary.BigEndian, contSignal)
             binary.Write(connection, binary.BigEndian, uint32(len(log.Key)))
-            fmt.Fprintf(connection, log.Key)
+            binary.Write(connection, binary.BigEndian, []byte(log.Key))
             binary.Write(connection, binary.BigEndian, uint32(len(log.Message)))
-            fmt.Fprintf(connection, log.Message)
+            binary.Write(connection, binary.BigEndian, []byte(log.Message))
+            fmt.Println("end send log")
         }
     }
 }
