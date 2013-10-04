@@ -32,9 +32,10 @@ func (t *Table) RemoveDead() {
     // remove dead members
 }
 
-func (t *Table) Write(w io.Writer) error {
+func (t *Table) WriteTo(w io.Writer) error {
     // remove the dead
     // Write out t.Members as an array using gob. Might require converting the map to an array
+    return nil
 }
 
 func (t *Table) mergeTables(members []Member) {
@@ -46,4 +47,5 @@ func (t *Table) Update(id ID, r io.Reader) error {
     // apply offsets given that this came from id
     // merge the results into t.Members; beware of timestamps in the future
     // remove the dead
+    return nil
 }
