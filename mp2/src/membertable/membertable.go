@@ -23,6 +23,7 @@ type Member struct {
 type Table struct {
     Members map[ID]Member
     timeStamps map[ID]Timestamp
+    isFailed map[ID]bool
 }
 
 // returns a timestamp for the current time when called
@@ -35,6 +36,7 @@ func (t *Table) JoinMember(m *Member) {
     // add m to t.Members
     t.Members[m.ID] = *m
     t.timeStamps[m.ID] = StampNow()
+    t.isFailed[m.ID] = false
 }
 
 func (t *Table) HeartbeatMember(id ID) {
@@ -45,12 +47,15 @@ func (t *Table) HeartbeatMember(id ID) {
         log.Println("Tried to update timestamp of a nonmember")
     }
 
+    if failed := t.isFailed[id]; failed {
+        log.Println("Tried to update timestamp of a failed member")
+    }
+
     t.timeStamps[id] = StampNow()
 }
 
 func (t *Table) RemoveDead() {
     // remove dead members
-    // TODO need to keep dead until drop time
     for id, _ := range t.Members {
         time, exists := t.timeStamps[id]
         if !exists {
@@ -60,6 +65,7 @@ func (t *Table) RemoveDead() {
         if curTime - time > TFail {
             // process not heard from, mark as failed
             log.Println("member", id, "has failed")
+            t.isFailed[id] = true
         }
 
         if curTime - time > TDrop {
@@ -72,10 +78,11 @@ func (t *Table) RemoveDead() {
 func (t *Table) ActiveMembers() []Member {
     memberArray := make([]Member, len(t.Members))
     index := 0
-    // TODO check for failed members
     for _, member := range t.Members {
-        memberArray[index] = member
-        index += 1
+        if !t.isFailed[member.ID] {
+            memberArray[index] = member
+            index += 1
+        }
     }
     return memberArray
 }
@@ -91,9 +98,9 @@ func (t *Table) WriteTo(w io.Writer) error {
 
 func (t *Table) mergeMember(member Member) {
     myInfo, exists := t.Members[member.ID]
-    // TODO check for failed members
     if exists {
-        if myInfo.HeartbeatID < member.HeartbeatID {
+        failed := t.isFailed[member.ID]
+        if myInfo.HeartbeatID < member.HeartbeatID  && !failed {
             myInfo.HeartbeatID = member.HeartbeatID
             t.Members[member.ID] = myInfo
             t.timeStamps[member.ID] = StampNow()
