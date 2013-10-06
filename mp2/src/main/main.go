@@ -11,6 +11,7 @@ import (
     "math/rand"
     "membertable"
     "net"
+    "os"
     "time"
 )
 
@@ -18,6 +19,7 @@ var listenAddress = flag.String("bind", ":7777", "the address for listening")
 var leaderAddress = flag.String("leader", "", "the address of the leader machine; leave unset to make this process leader")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
+var machineName = flag.String("name", "", "the name of this machine")
 
 type PacketHeader struct {
     Length int32
@@ -74,33 +76,46 @@ func sendHeartbeatToMember(m * membertable.Member, t * membertable.Table) error 
 }
 
 func sendHeartbeat(t * membertable.Table) error {
+    // Get a list of members we can send our hearbeat to
+    memberList := t.ActiveMembers()
+
     // We are alone on this earth :(
-    if len(t.Members) == 0 {
+    if len(memberList) == 0 {
         return nil
     }
 
-    // Form a list of each member from the ID amp
-    memberList := make([]*membertable.Member, len(t.Members))
-    memberIndex := 0
-    for _, v := range t.Members {
-        memberList[memberIndex] = &v
-        memberIndex++
-    }
-
     // Choose a member at random and send their heartbeat
-    sendToMember := memberList[rand.Int() % memberIndex]
-    return sendHeartbeatToMember(sendToMember, t)
+    sendToMember := memberList[rand.Int() % len(memberList)]
+    return sendHeartbeatToMember(&sendToMember, t)
 }
 
-func heartbeatProcess(t * membertable.Table, fatalChan chan bool) {
+func sendHeartbeatProcess(me * membertable.Member, t * membertable.Table, fatalChan chan bool) {
     for {
-        log.Printf("Sending Hearbeat...\n")
+        me.HeartbeatID++
         err := sendHeartbeat(t)
         if err != nil {
-            log.Printf("    %v\n", err)
+            log.Println(err)
         }
         time.Sleep(50 * time.Millisecond)
     }
+    fatalChan <- true
+}
+
+func listenHeartbeatProccess(t * membertable.Table, fatalChan chan bool) {
+    udpAddr, err := net.ResolveUDPAddr("udp", *listenAddress)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    ln, err := net.ListenUDP("udp", udpAddr)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    for {
+        ln.ReadFromUDP(nil)
+    }
+
     fatalChan <- true
 }
 
@@ -111,13 +126,53 @@ func leaderProcess(fatalChan chan bool) {
     fatalChan <- true
 }
 
+func getIP(hostname string) string {
+    machineIP, err := net.LookupHost(hostname)
+    if err != nil || len(machineIP) == 0 {
+        return ""
+    }
+
+    var preferredIP net.IP
+    for _, ipStr := range machineIP {
+        ip := net.ParseIP(ipStr)
+        // Prefer IPv4 addresses that come sooner in the list of LookupHost
+        if preferredIP == nil || preferredIP.To4() == nil && ip.To4() != nil {
+            preferredIP = ip
+        }
+    }
+
+    return preferredIP.String()
+}
+
+// Choose a color for a given ID
+func getColor(id membertable.ID) string {
+    switch id % 6 {
+        case 0: return "1;31";
+        case 1: return "1;32";
+        case 2: return "1;34";
+        case 3: return "1;33";
+        case 4: return "1;35";
+        case 5: return "1;36";
+    }
+    return "0";
+}
+
 func main() {
     flag.Parse()
 
     fatalChan := make(chan bool)
 
+    // Get the machines name
+    hostname, _ := os.Hostname()
+
+    // Get the address that this machine can be contacted from if none was given
+    bindAddress, bindPort, err := net.SplitHostPort(*listenAddress)
+    if bindAddress == "" {
+        bindAddress = getIP(hostname)
+    }
+
+
     var id membertable.ID
-    var err error
 
     if *leaderAddress == "" {
         // We are the LEADER! Take an ID and take our role as Master of IDs.
@@ -127,16 +182,41 @@ func main() {
         }
         go leaderProcess(fatalChan)
     } else {
+        // Get an ID from the leader
         if id, err = leader.RequestID(*leaderAddress); err != nil {
             log.Fatal(err)
             return
         }
     }
 
-    log.Printf("My ID: %v", id)
 
     var t membertable.Table
-    go heartbeatProcess(&t, fatalChan)
+
+    // Add ourselves to the table
+    me := membertable.Member{
+        ID: id,
+        Name: *machineName,
+        Address: bindAddress + ":" + bindPort,
+        HeartbeatID: 0,
+    }
+
+    // If no name was given, default to the host name
+    if me.Name == "" {
+        me.Name = hostname
+    }
+
+    // Configure the log file to be something nice
+    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.Name + "\x1B[0m] ")
+    log.SetFlags(0)
+
+    log.Printf("Hostname: %v\n", hostname)
+    log.Printf("Name: %v\n", me.Name)
+    log.Printf("IP: %v\n", bindAddress)
+    log.Printf("Address: %v\n", me.Address)
+    log.Printf("ID: %v\n", me.ID)
+
+    go sendHeartbeatProcess(&me, &t, fatalChan)
+    go listenHeartbeatProccess(&t, fatalChan)
 
     <-fatalChan
 }

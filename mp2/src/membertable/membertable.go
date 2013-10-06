@@ -116,9 +116,8 @@ func (t *Table) mergeTables(members []Member) {
     }
 }
 
-func (t *Table) Update(id ID, r io.Reader) error {
+func (t *Table) Update(r io.Reader) error {
     // read the input of a Table.Write
-    // apply offsets given that this came from id
     // merge the results into t.Members; beware of timestamps in the future
     // remove the dead
     defer t.RemoveDead()
