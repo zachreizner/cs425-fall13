@@ -7,7 +7,7 @@ import (
     "encoding/gob"
 )
 
-const TFail = Timestamp(1000)
+const TFail = Timestamp(1000000)
 const TDrop = Timestamp(3 * TFail)
 
 type ID int32
@@ -23,7 +23,24 @@ type Member struct {
 type Table struct {
     Members map[ID]Member
     timeStamps map[ID]Timestamp
-    isFailed map[ID]bool
+    IsFailed map[ID]bool
+}
+
+// initialize the Table struct to be empty
+func (t *Table) Init() {
+    t.Members = make(map[ID]Member)
+    t.timeStamps = make(map[ID]Timestamp)
+    t.IsFailed = make(map[ID]bool)
+}
+
+func (t *Table) GetTime(id ID) Timestamp {
+    return t.timeStamps[id]
+}
+
+func (t *Table) IsDead(id ID) bool {
+    failed, exists := t.IsFailed[id]
+
+    return !exists || failed
 }
 
 // returns a timestamp for the current time when called
@@ -34,9 +51,10 @@ func StampNow() Timestamp {
 func (t *Table) JoinMember(m *Member) {
     // set m.LastHeartbeat to now
     // add m to t.Members
+    log.Println("Adding member: Id=", m.ID, ", name=", m.Name)
     t.Members[m.ID] = *m
     t.timeStamps[m.ID] = StampNow()
-    t.isFailed[m.ID] = false
+    t.IsFailed[m.ID] = false
 }
 
 func (t *Table) HeartbeatMember(id ID) {
@@ -47,11 +65,17 @@ func (t *Table) HeartbeatMember(id ID) {
         log.Println("Tried to update timestamp of a nonmember")
     }
 
-    if failed := t.isFailed[id]; failed {
+    if failed := t.IsFailed[id]; failed {
         log.Println("Tried to update timestamp of a failed member")
     }
 
     t.timeStamps[id] = StampNow()
+}
+
+func (t *Table) dropMember(id ID) {
+    delete(t.Members, id)
+    delete(t.timeStamps, id)
+    delete(t.IsFailed, id)
 }
 
 func (t *Table) RemoveDead() {
@@ -65,12 +89,11 @@ func (t *Table) RemoveDead() {
         if curTime - time > TFail {
             // process not heard from, mark as failed
             log.Println("member", id, "has failed")
-            t.isFailed[id] = true
+            t.IsFailed[id] = true
         }
 
         if curTime - time > TDrop {
-            delete(t.Members, id)
-            delete(t.timeStamps, id)
+            t.dropMember(id)
         }
     }
 }
@@ -79,7 +102,7 @@ func (t *Table) ActiveMembers() []Member {
     memberArray := make([]Member, len(t.Members))
     index := 0
     for _, member := range t.Members {
-        if !t.isFailed[member.ID] {
+        if !t.IsFailed[member.ID] {
             memberArray[index] = member
             index += 1
         }
@@ -96,10 +119,10 @@ func (t *Table) WriteTo(w io.Writer) error {
     return enc.Encode(data)
 }
 
-func (t *Table) mergeMember(member Member) {
+func (t *Table) MergeMember(member Member) {
     myInfo, exists := t.Members[member.ID]
     if exists {
-        failed := t.isFailed[member.ID]
+        failed := t.IsFailed[member.ID]
         if myInfo.HeartbeatID < member.HeartbeatID  && !failed {
             myInfo.HeartbeatID = member.HeartbeatID
             t.Members[member.ID] = myInfo
@@ -109,10 +132,11 @@ func (t *Table) mergeMember(member Member) {
         t.JoinMember(&member)
     }
 }
-func (t *Table) mergeTables(members []Member) {
+
+func (t *Table) MergeTables(members []Member) {
     // apply the offsets of timeOffsetss to the members array
     for _, member := range members {
-        t.mergeMember(member)
+        t.MergeMember(member)
     }
 }
 
@@ -130,6 +154,6 @@ func (t *Table) Update(r io.Reader) error {
         return err
     }
 
-    t.mergeTables(memberArray)
+    t.MergeTables(memberArray)
     return nil
 }
