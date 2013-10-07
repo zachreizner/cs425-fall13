@@ -108,7 +108,7 @@ func (t *Table) ActiveMembers() []Member {
             index += 1
         }
     }
-    return memberArray
+    return memberArray[0:index]
 }
 
 func (t *Table) WriteTo(w io.Writer) error {
