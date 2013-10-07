@@ -86,7 +86,7 @@ func (t *Table) RemoveDead() {
             log.Println("While removing dead, found a member with no timestamp.")
         }
         curTime := StampNow()
-        if curTime - time > TFail {
+        if !t.IsFailed[id] && curTime - time > TFail {
             // process not heard from, mark as failed
             log.Println("member", id, "has failed")
             t.IsFailed[id] = true
