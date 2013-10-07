@@ -3,13 +3,14 @@ package main
 import (
     "bytes"
     "flag"
+    "io"
     "leader"
     "log"
     "math/rand"
     "membertable"
-    "strconv"
     "net"
     "os"
+    "strconv"
     "time"
 )
 
@@ -107,16 +108,22 @@ func leaderProcess(fatalChan chan bool) {
 }
 
 func getIP(hostname string) string {
-    machineIP, err := net.LookupHost(hostname)
+    machineIP, err := net.InterfaceAddrs()
     if err != nil || len(machineIP) == 0 {
         return ""
     }
 
     var preferredIP net.IP
     for _, ipStr := range machineIP {
-        ip := net.ParseIP(ipStr)
-        // Prefer IPv4 addresses that come sooner in the list of LookupHost
-        if preferredIP == nil || preferredIP.To4() == nil && ip.To4() != nil {
+        ipAddr, ok := ipStr.(*net.IPNet)
+        if !ok {
+            continue
+        }
+
+        ip := ipAddr.IP
+
+        // Prefer IPv4 addresses that come sooner in the list and are not local of LookupHost
+        if preferredIP == nil || (preferredIP.To4() == nil && ip.To4() != nil) || (preferredIP[12] == 127) {
             preferredIP = ip
         }
     }
@@ -197,7 +204,7 @@ func main() {
         log.Println(err)
     }
 
-    log.SetOutput(logfd)
+    log.SetOutput(io.MultiWriter(logfd, os.Stdout))
     log.Println("Hostname :", hostname)
     log.Println("Name     :", me.Name)
     log.Println("IP       :", bindAddress)
