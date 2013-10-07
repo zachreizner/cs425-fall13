@@ -7,7 +7,7 @@ import (
     "encoding/gob"
 )
 
-const TFail = Timestamp(1000000)
+const TFail = Timestamp(2 * time.Second)
 const TDrop = Timestamp(3 * TFail)
 
 type ID int32
@@ -99,6 +99,7 @@ func (t *Table) RemoveDead() {
 }
 
 func (t *Table) ActiveMembers() []Member {
+    t.RemoveDead()
     memberArray := make([]Member, len(t.Members))
     index := 0
     for _, member := range t.Members {
@@ -149,7 +150,7 @@ func (t *Table) Update(r io.Reader) error {
     dec := gob.NewDecoder(r)
 
     var memberArray []Member
-    err := dec.Decode(memberArray)
+    err := dec.Decode(&memberArray)
     if err != nil {
         return err
     }

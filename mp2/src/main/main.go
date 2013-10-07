@@ -2,10 +2,7 @@ package main
 
 import (
     "bytes"
-    "encoding/gob"
     "flag"
-    "hash/crc32"
-    "io"
     "leader"
     "log"
     "math/rand"
@@ -18,90 +15,63 @@ import (
 var listenAddress = flag.String("bind", ":7777", "the address for listening")
 var leaderAddress = flag.String("leader", "", "the address of the leader machine; leave unset to make this process leader")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
-var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
 var machineName = flag.String("name", "", "the name of this machine")
+var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
 
-type PacketHeader struct {
-    Length int32
-    Checksum uint32
-}
-
-type PacketWriter struct {
-    b bytes.Buffer
-}
-
-
-func (p *PacketWriter) Write(b []byte) (int, error) {
-    return p.b.Write(b)
-}
-
-func (p *PacketWriter) Send(w io.Writer) error {
-    // Create the header for the packet, which involves hashing the buffer
-    hasher := crc32.NewIEEE()
-    hasher.Write(p.b.Bytes()) // Hash interface never has errors
-    packetHeader := PacketHeader{
-        Length: int32(p.b.Len()),
-        Checksum: hasher.Sum32(),
-    }
-
-    // Send the header
-    headerEncoder := gob.NewEncoder(w)
-    err := headerEncoder.Encode(packetHeader)
-    if err != nil {
-        return err
-    }
-
-    // Send the payload
-    _, err = p.b.WriteTo(w)
-    return err
-}
-
-func sendHeartbeatToMember(m * membertable.Member, t * membertable.Table) error {
+func sendHeartbeatToAddress(addr string, t *membertable.Table) error {
     // Connect to the given member
-    conn, err := net.Dial("udp", m.Address)
+    conn, err := net.Dial("udp", addr)
     if err != nil {
         return err
     }
 
     defer conn.Close()
 
+    var buffer bytes.Buffer
+
     // Write out the hearbeat to a packet
-    var heartbeatPacket PacketWriter
-    if err := t.WriteTo(&heartbeatPacket); err != nil {
+    if err = t.WriteTo(&buffer); err != nil {
         return err
     }
 
-    // Send the packet down the wire
-    return heartbeatPacket.Send(conn)
+    _, err = conn.Write(buffer.Bytes())
+    return err
 }
 
-func sendHeartbeat(t * membertable.Table) error {
+func sendHeartbeat(me *membertable.Member, t *membertable.Table) error {
     // Get a list of members we can send our hearbeat to
     memberList := t.ActiveMembers()
 
     // We are alone on this earth :(
-    if len(memberList) == 0 {
+    if len(memberList) == 0 || (len(memberList) == 1 && memberList[0].ID == me.ID) {
+        log.Println("So allooone")
         return nil
     }
 
     // Choose a member at random and send their heartbeat
-    sendToMember := memberList[rand.Int() % len(memberList)]
-    return sendHeartbeatToMember(&sendToMember, t)
+    var sendToMember *membertable.Member
+    for sendToMember == nil || sendToMember.ID == me.ID {
+        sendToMember = &memberList[rand.Int() % len(memberList)]
+    }
+
+    return sendHeartbeatToAddress(sendToMember.Address, t)
 }
 
-func sendHeartbeatProcess(me * membertable.Member, t * membertable.Table, fatalChan chan bool) {
+func sendHeartbeatProcess(me *membertable.Member, t *membertable.Table, fatalChan chan bool) {
     for {
         me.HeartbeatID++
-        err := sendHeartbeat(t)
+        t.MergeMember(*me)
+        err := sendHeartbeat(me, t)
         if err != nil {
             log.Println(err)
         }
-        time.Sleep(50 * time.Millisecond)
+        time.Sleep(100 * time.Millisecond)
     }
     fatalChan <- true
 }
 
-func listenHeartbeatProccess(t * membertable.Table, fatalChan chan bool) {
+
+func listenHeartbeatProccess(t *membertable.Table, fatalChan chan bool) {
     udpAddr, err := net.ResolveUDPAddr("udp", *listenAddress)
     if err != nil {
         log.Fatal(err)
@@ -112,8 +82,17 @@ func listenHeartbeatProccess(t * membertable.Table, fatalChan chan bool) {
         log.Fatal(err)
     }
 
+    buffer := make([]byte, 1 << 16)
     for {
-        ln.ReadFromUDP(nil)
+        bytesRead, _, err := ln.ReadFromUDP(buffer)
+
+        if err != nil {
+            log.Println(err)
+            continue
+        }
+        if err = t.Update(bytes.NewBuffer(buffer[0:bytesRead])); err != nil {
+            log.Println(err)
+        }
     }
 
     fatalChan <- true
@@ -191,6 +170,7 @@ func main() {
 
 
     var t membertable.Table
+    t.Init()
 
     // Add ourselves to the table
     me := membertable.Member{
@@ -209,11 +189,20 @@ func main() {
     log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.Name + "\x1B[0m] ")
     log.SetFlags(0)
 
-    log.Printf("Hostname: %v\n", hostname)
-    log.Printf("Name: %v\n", me.Name)
-    log.Printf("IP: %v\n", bindAddress)
-    log.Printf("Address: %v\n", me.Address)
-    log.Printf("ID: %v\n", me.ID)
+    log.Println("Hostname :", hostname)
+    log.Println("Name     :", me.Name)
+    log.Println("IP       :", bindAddress)
+    log.Println("Address  :", me.Address)
+    log.Println("ID       :", me.ID)
+
+    t.JoinMember(&me)
+
+    if *seedAddress != "" {
+        log.Printf("sending heartbeat to seed member")
+        if err = sendHeartbeatToAddress(*seedAddress, &t); err != nil {
+            log.Fatal(err)
+        }
+    }
 
     go sendHeartbeatProcess(&me, &t, fatalChan)
     go listenHeartbeatProccess(&t, fatalChan)
