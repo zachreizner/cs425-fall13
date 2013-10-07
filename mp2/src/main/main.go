@@ -7,6 +7,7 @@ import (
     "log"
     "math/rand"
     "membertable"
+    "strconv"
     "net"
     "os"
     "time"
@@ -186,9 +187,17 @@ func main() {
     }
 
     // Configure the log file to be something nice
-    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.Name + "\x1B[0m] ")
+    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.Name + " " + strconv.Itoa(int(me.ID)) + " " + bindAddress + "\x1B[0m]:")
+    //log.SetPrefix(strconv.Itoa(int(me.ID)) + " " + bindAddress + ":")
     log.SetFlags(0)
 
+    logfd, err := os.Create(*logFile + me.Name)
+
+    if err != nil {
+        log.Println(err)
+    }
+
+    log.SetOutput(logfd)
     log.Println("Hostname :", hostname)
     log.Println("Name     :", me.Name)
     log.Println("IP       :", bindAddress)
