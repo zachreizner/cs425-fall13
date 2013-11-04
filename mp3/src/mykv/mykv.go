@@ -4,6 +4,7 @@ import (
     "hash/fnv"
     "encoding/binary"
     "errors"
+    "log"
 )
 
 var (
@@ -28,13 +29,19 @@ type KeyValue struct {
     Value interface{}
 }
 
+func (kv *KeyValueStore) Debug() {
+    log.Println(kv.KeyValues)
+}
+
 func (kv *KeyValueStore) Insert(args *KeyValue, reply *bool) error {
+    defer kv.Debug()
     kv.KeyValues[args.Key] = args.Value
     *reply = true
     return nil
 }
 
 func (kv *KeyValueStore) Update(args *KeyValue, reply *bool) error {
+    defer kv.Debug()
     _, ok := kv.KeyValues[args.Key]
     if !ok {
         *reply = false
@@ -46,6 +53,7 @@ func (kv *KeyValueStore) Update(args *KeyValue, reply *bool) error {
 }
 
 func (kv *KeyValueStore) Lookup(args *int, reply *interface{}) error {
+    defer kv.Debug()
     v, ok := kv.KeyValues[*args]
     if !ok {
         *reply = nil
@@ -56,6 +64,7 @@ func (kv *KeyValueStore) Lookup(args *int, reply *interface{}) error {
 }
 
 func (kv *KeyValueStore) Delete(args *int, reply *bool) error {
+    defer kv.Debug()
     _, ok := kv.KeyValues[*args]
     if !ok {
         *reply = false
