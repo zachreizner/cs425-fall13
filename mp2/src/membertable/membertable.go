@@ -141,6 +141,14 @@ func (t *Table) MergeTables(members []Member) {
     }
 }
 
+func (t *Table) RpcUpdate(members []Member, dummy *int) error {
+    // a second parameter as a pointer is needed, but i have no use for it
+    defer t.RemoveDead()
+    t.MergeTables(members)
+    dummy = 0
+    return nil
+}
+
 func (t *Table) Update(r io.Reader) error {
     // read the input of a Table.Write
     // merge the results into t.Members; beware of timestamps in the future
