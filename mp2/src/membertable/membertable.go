@@ -145,7 +145,7 @@ func (t *Table) RpcUpdate(members []Member, dummy *int) error {
     // a second parameter as a pointer is needed, but i have no use for it
     defer t.RemoveDead()
     t.MergeTables(members)
-    dummy = 0
+    *dummy = 0
     return nil
 }
 

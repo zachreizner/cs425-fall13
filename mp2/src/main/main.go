@@ -10,6 +10,8 @@ import (
     "membertable"
     "net"
     "os"
+    "net/rpc"
+    "net/http"
     "strconv"
     "time"
 )
@@ -22,22 +24,21 @@ var logFile = flag.String("logs", "machine.log", "the file name to store the log
 
 func sendHeartbeatToAddress(addr string, t *membertable.Table) error {
     // Connect to the given member
-    conn, err := net.Dial("udp", addr)
+    client, err := rpc.DialHTTP("tcp", addr)
     if err != nil {
         return err
     }
 
-    defer conn.Close()
+    defer client.Close()
 
-    var buffer bytes.Buffer
-
-    // Write out the hearbeat to a packet
-    if err = t.WriteTo(&buffer); err != nil {
-        return err
+    var reply int
+    data := t.ActiveMembers()
+    callErr := client.Call("Table.RpcUpdate", data, &reply)
+    if callErr != nil {
+        log.Print("Error while sending heardbeat")
+        return callErr
     }
-
-    _, err = conn.Write(buffer.Bytes())
-    return err
+    return nil
 }
 
 func sendHeartbeat(me *membertable.Member, t *membertable.Table) error {
@@ -221,7 +222,14 @@ func main() {
     }
 
     go sendHeartbeatProcess(&me, &t, fatalChan)
-    go listenHeartbeatProccess(&t, fatalChan)
+    rpc.Register(&t)
+    rpc.HandleHTTP()
+    l, e := net.Listen("tcp", ":" + bindPort)
+    log.Print("Bindport: " + bindPort)
+    if e != nil {
+        log.Print("RPC bind failure")
+    }
+    go http.Serve(l, nil)
 
     <-fatalChan
 }
