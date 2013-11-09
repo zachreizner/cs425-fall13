@@ -8,6 +8,7 @@ import (
     "net/http"
     "net/rpc"
     "os"
+    "time"
 
     "mykv"
 )
@@ -15,13 +16,13 @@ import (
 // Replace this simple implentation with whatever you have
 // Note that we may get rid of the concept of a leader all together
 type Leader struct {
-	lastID int32
+    lastID int32
 }
 
-func (l *Leader) GetID(args interface{}, id *int32) error {
-	l.lastID += 1
-	*id = l.lastID
-	return nil
+func (l *Leader) GetID(args *int32, id *int32) error {
+    l.lastID += 1
+    *id = l.lastID
+    return nil
 }
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening to services")
@@ -42,12 +43,12 @@ func getIP(hostname string) string {
 
         // We need to read the ip address which can be nested within different data structures.
         switch ipSource := ipStr.(type) {
-    	case *net.IPNet:
-        	ip = ipSource.IP
-    	case *net.IPAddr:
-    		ip = ipSource.IP
-		default:
-			continue
+        case *net.IPNet:
+            ip = ipSource.IP
+        case *net.IPAddr:
+            ip = ipSource.IP
+        default:
+            continue
         }
 
         // Prefer IPv4 addresses that come sooner in the list and are not local of LookupHost
@@ -72,9 +73,9 @@ func getColor(id int32) string {
     return "0";
 }
 func main() {
-	flag.Parse()
+    flag.Parse()
 
-	// Get the machines name
+    // Get the machines name
     hostname, _ := os.Hostname()
 
     name := *machineName
@@ -90,7 +91,7 @@ func main() {
 
     addr := bindAddress + ":" + bindPort
 
-	// Configure the log file to be something nice
+    // Configure the log file to be something nice
     log.SetPrefix("[\x1B[" + getColor(3) + "m" + name + "\x1B[0m]:")
     log.SetFlags(0)
 
@@ -106,11 +107,23 @@ func main() {
     log.Println("IP       :", bindAddress)
     log.Println("Address  :", addr)
 
-	kv := new(mykv.KeyValueStore)
-	leader := new(Leader)
-	rpc.Register(kv)
-	rpc.Register(leader)
-	rpc.HandleHTTP()
-	l, _ := net.Listen("tcp", ":1234")
-	http.Serve(l, nil)
+    kv := new(mykv.KVNode)
+    leader := new(Leader)
+    rpc.Register(kv)
+    rpc.Register(leader)
+    rpc.HandleHTTP()
+    l, _ := net.Listen("tcp", ":7777")
+    go http.Serve(l, nil)
+
+    client, err := rpc.DialHTTP("tcp", addr)
+    if err != nil {
+        log.Fatal(err)
+    }
+    var gotId int32
+    client.Call("Leader.GetID", &gotId, &gotId)
+    log.Println(gotId)
+
+    for {
+        time.Sleep(1)
+    }
 }

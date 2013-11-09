@@ -4,74 +4,36 @@ import (
     "hash/fnv"
     "encoding/binary"
     "errors"
-    "log"
+    "net/rpc"
 )
 
 var (
     ErrNoKey = errors.New("no such key")
 )
 
-type KeyValueStore struct {
-    KeyValues map[int]interface{}
-    MyHash uint32
-    NextHash uint32
-
+type RPCConnector interface {
+    Connect(addr string) (*rpc.Client, error)
 }
 
-func HashKey(key uint32) uint32 {
+type Key uint32
+type HashedKey uint32
+
+func (k Key) Hashed() HashedKey {
     hasher := fnv.New32a()
-    binary.Write(hasher, binary.BigEndian, key)
-    return hasher.Sum32()
+    binary.Write(hasher, binary.BigEndian, k)
+    return HashedKey(hasher.Sum32())
 }
 
 type KeyValue struct {
-    Key int
+    Key Key
     Value interface{}
 }
 
-func (kv *KeyValueStore) Debug() {
-    log.Println(kv.KeyValues)
+func (kv KeyValue) HashedKey() HashedKey {
+    return kv.Key.Hashed()
 }
 
-func (kv *KeyValueStore) Insert(args *KeyValue, reply *bool) error {
-    defer kv.Debug()
-    kv.KeyValues[args.Key] = args.Value
-    *reply = true
-    return nil
+func hashInRange(prev HashedKey, current HashedKey, hash HashedKey) bool {
+    return (hash > prev && hash <= current) ||
+           ((prev >= current) && (hash > prev || hash <= current))
 }
-
-func (kv *KeyValueStore) Update(args *KeyValue, reply *bool) error {
-    defer kv.Debug()
-    _, ok := kv.KeyValues[args.Key]
-    if !ok {
-        *reply = false
-        return ErrNoKey
-    }
-    kv.KeyValues[args.Key] = args.Value
-    *reply = true
-    return nil
-}
-
-func (kv *KeyValueStore) Lookup(args *int, reply *interface{}) error {
-    defer kv.Debug()
-    v, ok := kv.KeyValues[*args]
-    if !ok {
-        *reply = nil
-        return ErrNoKey
-    }
-    *reply = v
-    return nil
-}
-
-func (kv *KeyValueStore) Delete(args *int, reply *bool) error {
-    defer kv.Debug()
-    _, ok := kv.KeyValues[*args]
-    if !ok {
-        *reply = false
-        return ErrNoKey
-    }
-    delete(kv.KeyValues, *args)
-    *reply = true
-    return nil
-}
-
