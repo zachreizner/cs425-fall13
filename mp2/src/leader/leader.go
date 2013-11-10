@@ -16,7 +16,7 @@ func handleRequest(c net.Conn, id membertable.IDNum) {
 
 // Return the next ID (stored in the ID file) and write out the new next ID to the ID file.
 func IncrementIDFile() (membertable.IDNum, error) {
-    f, err := os.OpenFile(idFilename, os.O_RDWR | os.O_CREATE, 0)
+    f, err := os.OpenFile(idFilename, os.O_RDWR | os.O_CREATE, os.ModePerm)
     if err != nil {
         return 0, err
     }

@@ -34,10 +34,21 @@ type Table struct {
     myID ID
 }
 
-// initialize the Table struct to be empty
+// initialize the Table struct with only myself as a member
+// timestamp is time of init
+// HeartbeatID is set to 0
+// IsFailed is false
 func (t *Table) Init(me ID) {
     t.Members = make(map[ID]Member)
     t.myID = me
+
+    member := Member{
+        ID: me,
+        HeartbeatID: 0,
+        TimeStamp: StampNow(),
+        IsFailed: false,
+    }
+    t.Members[me] = member
 }
 
 func (t *Table) GetTime(id ID) Timestamp {

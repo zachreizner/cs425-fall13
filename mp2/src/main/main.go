@@ -1,7 +1,6 @@
 package main
 
 import (
-    "bytes"
     "flag"
     "io"
     "leader"
@@ -20,33 +19,6 @@ var seedAddress = flag.String("seed", "", "the address of some machine to grab t
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
 
-
-func listenHeartbeatProccess(t *membertable.Table, fatalChan chan bool) {
-    udpAddr, err := net.ResolveUDPAddr("udp", *listenAddress)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    ln, err := net.ListenUDP("udp", udpAddr)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    buffer := make([]byte, 1 << 16)
-    for {
-        bytesRead, _, err := ln.ReadFromUDP(buffer)
-
-        if err != nil {
-            log.Println(err)
-            continue
-        }
-        if err = t.Update(bytes.NewBuffer(buffer[0:bytesRead])); err != nil {
-            log.Println(err)
-        }
-    }
-
-    fatalChan <- true
-}
 
 func leaderProcess(fatalChan chan bool) {
     if err := leader.Run(); err != nil {
@@ -80,6 +52,7 @@ func getIP(hostname string) string {
 }
 
 // Choose a color for a given ID
+// TODO maybe move this to membertable
 func getColor(id membertable.ID) string {
     switch id.Num % 6 {
         case 0: return "1;31";
@@ -164,8 +137,6 @@ func main() {
     log.Println("Address  :", me.ID.Address)
     log.Println("ID       :", me.ID.Num)
 
-    t.JoinMember(&me)
-
     if *seedAddress != "" {
         log.Printf("sending heartbeat to seed member")
         if err = t.SendHeartbeatToAddress(*seedAddress); err != nil {
@@ -173,7 +144,6 @@ func main() {
         }
     }
 
-    go t.SendHeartbeatProcess(fatalChan)
     rpc.Register(&t)
     rpc.HandleHTTP()
     l, e := net.Listen("tcp", ":" + bindPort)
@@ -182,6 +152,7 @@ func main() {
         log.Print("RPC bind failure")
     }
     go http.Serve(l, nil)
+    go t.SendHeartbeatProcess(fatalChan)
 
     <-fatalChan
 }
