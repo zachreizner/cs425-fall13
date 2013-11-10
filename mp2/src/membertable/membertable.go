@@ -1,12 +1,14 @@
 package membertable
 
 import (
+    "os"
     "io"
     "log"
     "time"
     "net/rpc"
     "math/rand"
     "encoding/gob"
+    "encoding/binary"
 )
 
 const TFail = Timestamp(2 * time.Second)
@@ -178,6 +180,46 @@ func (t *Table) Update(r io.Reader) error {
 
     t.MergeTables(memberArray)
     return nil
+}
+
+func IncrementIDFile(filename string) (IDNum, error) {
+    f, err := os.OpenFile(filename, os.O_RDWR | os.O_CREATE, os.ModePerm)
+    if err != nil {
+        return 0, err
+    }
+
+    defer f.Close()
+
+    fi, err := f.Stat()
+    if err != nil {
+        return 0, err
+    }
+
+    // A zero file size means there was no ID file, so we should create one with the second ID
+    // (which is 1) and return the starting ID (which is 1).
+    if fi.Size() == 0 {
+        err = binary.Write(f, binary.BigEndian, IDNum(1))
+        return 0, err
+    }
+
+    // Read the id which we will return
+    var id IDNum
+    if err = binary.Read(f, binary.BigEndian, &id); err != nil {
+        return 0, err
+    }
+
+    // Move to the beginning of the file and erase it
+    if _, err = f.Seek(0, 0); err != nil {
+        return id, err
+    }
+
+    if err = f.Truncate(0); err != nil {
+        return id, err
+    }
+
+    // Write out what the next id should be, but do not return it
+    err = binary.Write(f, binary.BigEndian, IDNum(id + 1))
+    return id, err
 }
 
 ////////////// Heartbeating ////////////////////

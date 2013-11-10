@@ -79,24 +79,11 @@ func main() {
         bindAddress = getIP(hostname)
     }
 
-
-    var id membertable.IDNum
-
-    if *leaderAddress == "" {
-        // We are the LEADER! Take an ID and take our role as Master of IDs.
-        if id, err = leader.IncrementIDFile(); err != nil {
-            log.Fatal(err)
-            return
-        }
-        go leaderProcess(fatalChan)
-    } else {
-        // Get an ID from the leader
-        if id, err = leader.RequestID(*leaderAddress); err != nil {
-            log.Fatal(err)
-            return
-        }
+    id, idErr := membertable.IncrementIDFile(bindAddress + "_" + bindPort + ".bin")
+    if idErr != nil {
+        log.Println("Error retriving id number")
+        id = 0
     }
-
 
 
     // Add ourselves to the table
@@ -106,25 +93,19 @@ func main() {
         Address: bindAddress + ":" + bindPort,
     }
 
-    me := membertable.Member{
-        ID: myID,
-        HeartbeatID: 0,
-    }
-
     // If no name was given, default to the host name
-    if me.ID.Name == "" {
-        me.ID.Name = hostname
+    if myID.Name == "" {
+        myID.Name = hostname
     }
 
     var t membertable.Table
-    t.Init(me.ID)
+    t.Init(myID)
 
     // Configure the log file to be something nice
-    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.ID.Name + " " + strconv.Itoa(int(me.ID.Num)) + " " + bindAddress + "\x1B[0m]:")
-    //log.SetPrefix(strconv.Itoa(int(me.ID)) + " " + bindAddress + ":")
+    log.SetPrefix("[\x1B[" + getColor(myID) + "m" + myID.Name + " " + strconv.Itoa(int(myID.Num)) + " " + bindAddress + "\x1B[0m]:")
     log.SetFlags(0)
 
-    logfd, err := os.Create(*logFile + me.ID.Name)
+    logfd, err := os.Create(*logFile + myID.Name)
 
     if err != nil {
         log.Println(err)
@@ -132,10 +113,10 @@ func main() {
 
     log.SetOutput(io.MultiWriter(logfd, os.Stdout))
     log.Println("Hostname :", hostname)
-    log.Println("Name     :", me.ID.Name)
+    log.Println("Name     :", myID.Name)
     log.Println("IP       :", bindAddress)
-    log.Println("Address  :", me.ID.Address)
-    log.Println("ID       :", me.ID.Num)
+    log.Println("Address  :", myID.Address)
+    log.Println("ID       :", myID.Num)
 
     if *seedAddress != "" {
         log.Printf("sending heartbeat to seed member")
