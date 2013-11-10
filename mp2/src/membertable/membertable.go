@@ -181,6 +181,11 @@ func (t *Table) MergeTables(members []Member) {
     }
 }
 
+func (t *Table) RPCGetActiveMembers(dummy int, members *[]Member) error {
+    *members = t.ActiveMembers()
+    return nil
+}
+
 func (t *Table) RpcUpdate(members []Member, dummy *int) error {
     // a second parameter as a pointer is needed, but i have no use for it
     defer t.RemoveDead()
