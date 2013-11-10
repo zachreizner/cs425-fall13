@@ -6,14 +6,12 @@ import (
     "io"
     "leader"
     "log"
-    "math/rand"
     "membertable"
     "net"
     "os"
     "net/rpc"
     "net/http"
     "strconv"
-    "time"
 )
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening")
@@ -21,57 +19,6 @@ var leaderAddress = flag.String("leader", "", "the address of the leader machine
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
-
-func sendHeartbeatToAddress(addr string, t *membertable.Table) error {
-    // Connect to the given member
-    client, err := rpc.DialHTTP("tcp", addr)
-    if err != nil {
-        return err
-    }
-
-    defer client.Close()
-
-    var reply int
-    data := t.ActiveMembers()
-    callErr := client.Call("Table.RpcUpdate", data, &reply)
-    if callErr != nil {
-        log.Print("Error while sending heardbeat")
-        return callErr
-    }
-    return nil
-}
-
-func sendHeartbeat(me *membertable.Member, t *membertable.Table) error {
-    // Get a list of members we can send our hearbeat to
-    memberList := t.ActiveMembers()
-
-    // We are alone on this earth :(
-    if len(memberList) == 0 || (len(memberList) == 1 && memberList[0].ID == me.ID) {
-        log.Println("So allooone")
-        return nil
-    }
-
-    // Choose a member at random and send their heartbeat
-    var sendToMember *membertable.Member
-    for sendToMember == nil || sendToMember.ID == me.ID {
-        sendToMember = &memberList[rand.Int() % len(memberList)]
-    }
-
-    return sendHeartbeatToAddress(sendToMember.ID.Address, t)
-}
-
-func sendHeartbeatProcess(me *membertable.Member, t *membertable.Table, fatalChan chan bool) {
-    for {
-        me.HeartbeatID++
-        t.MergeMember(*me)
-        err := sendHeartbeat(me, t)
-        if err != nil {
-            log.Println(err)
-        }
-        time.Sleep(100 * time.Millisecond)
-    }
-    fatalChan <- true
-}
 
 
 func listenHeartbeatProccess(t *membertable.Table, fatalChan chan bool) {
@@ -178,8 +125,6 @@ func main() {
     }
 
 
-    var t membertable.Table
-    t.Init()
 
     // Add ourselves to the table
     myID := membertable.ID{
@@ -197,6 +142,9 @@ func main() {
     if me.ID.Name == "" {
         me.ID.Name = hostname
     }
+
+    var t membertable.Table
+    t.Init(me.ID)
 
     // Configure the log file to be something nice
     log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.ID.Name + " " + strconv.Itoa(int(me.ID.Num)) + " " + bindAddress + "\x1B[0m]:")
@@ -220,12 +168,12 @@ func main() {
 
     if *seedAddress != "" {
         log.Printf("sending heartbeat to seed member")
-        if err = sendHeartbeatToAddress(*seedAddress, &t); err != nil {
+        if err = t.SendHeartbeatToAddress(*seedAddress); err != nil {
             log.Fatal(err)
         }
     }
 
-    go sendHeartbeatProcess(&me, &t, fatalChan)
+    go t.SendHeartbeatProcess(fatalChan)
     rpc.Register(&t)
     rpc.HandleHTTP()
     l, e := net.Listen("tcp", ":" + bindPort)

@@ -4,6 +4,8 @@ import (
     "io"
     "log"
     "time"
+    "net/rpc"
+    "math/rand"
     "encoding/gob"
 )
 
@@ -29,11 +31,13 @@ type Member struct {
 
 type Table struct {
     Members map[ID]Member
+    myID ID
 }
 
 // initialize the Table struct to be empty
-func (t *Table) Init() {
+func (t *Table) Init(me ID) {
     t.Members = make(map[ID]Member)
+    t.myID = me
 }
 
 func (t *Table) GetTime(id ID) Timestamp {
@@ -164,3 +168,57 @@ func (t *Table) Update(r io.Reader) error {
     t.MergeTables(memberArray)
     return nil
 }
+
+////////////// Heartbeating ////////////////////
+func (t *Table) SendHeartbeatToAddress(addr string) error {
+    // Connect to the given member
+    client, err := rpc.DialHTTP("tcp", addr)
+    if err != nil {
+        return err
+    }
+
+    defer client.Close()
+
+    var reply int
+    data := t.ActiveMembers()
+    callErr := client.Call("Table.RpcUpdate", data, &reply)
+    if callErr != nil {
+        log.Print("Error while sending heardbeat")
+        return callErr
+    }
+    return nil
+}
+
+func (t *Table) SendHeartbeat() error {
+    // Get a list of members we can send our hearbeat to
+    memberList := t.ActiveMembers()
+
+    // We are alone on this earth :(
+    if len(memberList) == 0 || (len(memberList) == 1 && memberList[0].ID == t.myID) {
+        log.Println("So allooone")
+        return nil
+    }
+
+    // Choose a member at random and send their heartbeat
+    var sendToMember *Member
+    for sendToMember == nil || sendToMember.ID == t.myID {
+        sendToMember = &memberList[rand.Int() % len(memberList)]
+    }
+
+    return t.SendHeartbeatToAddress(sendToMember.ID.Address)
+}
+
+func (t *Table) SendHeartbeatProcess(fatalChan chan bool) {
+    for {
+        mem := t.Members[t.myID]
+        mem.HeartbeatID++
+        t.MergeMember(mem)
+        err := t.SendHeartbeat()
+        if err != nil {
+            log.Println(err)
+        }
+        time.Sleep(100 * time.Millisecond)
+    }
+    fatalChan <- true
+}
+
