@@ -1,35 +1,105 @@
 package main
 
 import (
+    "bufio"
     "flag"
+    "fmt"
     "io"
     "log"
     "net"
     "net/http"
     "net/rpc"
     "os"
+    "regexp"
+    "strconv"
+    "strings"
     "time"
 
     "mykv"
+    "membertable"
 )
-
-// Replace this simple implentation with whatever you have
-// Note that we may get rid of the concept of a leader all together
-type Leader struct {
-    lastID int32
-}
-
-func (l *Leader) GetID(args *int32, id *int32) error {
-    l.lastID += 1
-    *id = l.lastID
-    return nil
-}
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening to services")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
+var command = flag.String("run", "", "command to run")
+var interactive = flag.Bool("interactive", false, "set to true to run interactively; cancels running a node and run command")
 
+func makeGraph() *mykv.KVGraph {
+    return nil
+}
+
+type commandDispatch struct {
+    RE *regexp.Regexp
+    Handler func([]string, *mykv.KVGraph) bool
+}
+
+func handleInsert(params []string, g *mykv.KVGraph) bool {
+    if len(params) != 3 {
+        log.Println("not enough params")
+        return true
+    }
+    keyUint, err := strconv.ParseUint(params[1], 10, 32)
+    if err != nil {
+        log.Println("invalid integer key")
+        return true
+    }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), params[2] }
+    if err := g.Insert(kv); err != nil {
+        log.Println("insert error: ", err)
+        return true
+    }
+    return true
+}
+
+var commandRE = []commandDispatch{
+    { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleInsert },
+    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleUpdate },
+    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleLookup },
+    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleDelete },
+}
+
+func runCommand(cmd string, g *mykv.KVGraph) bool {
+    for _, command := range commandRE {
+        matches := command.RE.FindStringSubmatch(cmd)
+        if matches != nil {
+            return command.Handler(matches, g)
+        }
+    }
+    log.Println("invalid command")
+    return true
+}
+
+func runInteractive(g *mykv.KVGraph) {
+    if *seedAddress == "" {
+        log.Println("must have machine to connect to in interactive mode")
+        //return
+    }
+
+    promptReader := bufio.NewReader(os.Stdin)
+    for {
+        fmt.Print("> ")
+        line, err := promptReader.ReadString('\n')
+        if err != nil {
+            log.Println("error reading prompt: ", err)
+            break
+        }
+
+        cmd := strings.TrimSuffix(line, "\n")
+        if len(cmd) == 0 {
+            continue
+        }
+
+        queryStartTime := time.Now()
+
+        if !runCommand(cmd, g) {
+            break
+        }
+
+        fmt.Println("cmd finished; took", time.Since(queryStartTime))
+    }
+}
 
 func getIP(hostname string) string {
     machineIP, err := net.InterfaceAddrs()
@@ -72,9 +142,8 @@ func getColor(id int32) string {
     }
     return "0";
 }
-func main() {
-    flag.Parse()
 
+func runServer() {
     // Get the machines name
     hostname, _ := os.Hostname()
 
@@ -89,11 +158,31 @@ func main() {
         bindAddress = getIP(hostname)
     }
 
+    id, idErr := membertable.IncrementIDFile(bindAddress + "_" + bindPort + ".bin")
+    if idErr != nil {
+        log.Println("Error retriving id number")
+        id = 0
+    }
+
+    // Add ourselves to the table
+    myID := membertable.ID{
+        Num: id,
+        Name: *machineName,
+        Address: bindAddress + ":" + bindPort,
+    }
+
+    // If no name was given, default to the host name
+    if myID.Name == "" {
+        myID.Name = hostname
+    }
+
+    var t membertable.Table
+    t.Init(myID)
+
     addr := bindAddress + ":" + bindPort
 
     // Configure the log file to be something nice
     log.SetPrefix("[\x1B[" + getColor(3) + "m" + name + "\x1B[0m]:")
-    log.SetFlags(0)
 
     logfd, err := os.Create(*logFile)
 
@@ -107,23 +196,27 @@ func main() {
     log.Println("IP       :", bindAddress)
     log.Println("Address  :", addr)
 
-    kv := new(mykv.KVNode)
-    leader := new(Leader)
-    rpc.Register(kv)
-    rpc.Register(leader)
+    var kv mykv.KVNode
+    rpc.Register(&kv)
+    rpc.Register(&t)
     rpc.HandleHTTP()
-    l, _ := net.Listen("tcp", ":7777")
-    go http.Serve(l, nil)
+    l, _ := net.Listen("tcp", *listenAddress)
+    http.Serve(l, nil)
+}
 
-    client, err := rpc.DialHTTP("tcp", addr)
-    if err != nil {
-        log.Fatal(err)
-    }
-    var gotId int32
-    client.Call("Leader.GetID", &gotId, &gotId)
-    log.Println(gotId)
+func main() {
+    log.SetFlags(0)
+    flag.Parse()
 
-    for {
-        time.Sleep(1)
+    if *interactive {
+        runInteractive(nil)
+        return
     }
+
+    if *command != "" {
+        runCommand(*command, nil)
+        return
+    }
+
+    runServer()
 }
