@@ -57,7 +57,7 @@ func sendHeartbeat(me *membertable.Member, t *membertable.Table) error {
         sendToMember = &memberList[rand.Int() % len(memberList)]
     }
 
-    return sendHeartbeatToAddress(sendToMember.Address, t)
+    return sendHeartbeatToAddress(sendToMember.ID.Address, t)
 }
 
 func sendHeartbeatProcess(me *membertable.Member, t *membertable.Table, fatalChan chan bool) {
@@ -134,7 +134,7 @@ func getIP(hostname string) string {
 
 // Choose a color for a given ID
 func getColor(id membertable.ID) string {
-    switch id % 6 {
+    switch id.Num % 6 {
         case 0: return "1;31";
         case 1: return "1;32";
         case 2: return "1;34";
@@ -160,7 +160,7 @@ func main() {
     }
 
 
-    var id membertable.ID
+    var id membertable.IDNum
 
     if *leaderAddress == "" {
         // We are the LEADER! Take an ID and take our role as Master of IDs.
@@ -182,24 +182,28 @@ func main() {
     t.Init()
 
     // Add ourselves to the table
-    me := membertable.Member{
-        ID: id,
+    myID := membertable.ID{
+        Num: id,
         Name: *machineName,
         Address: bindAddress + ":" + bindPort,
+    }
+
+    me := membertable.Member{
+        ID: myID,
         HeartbeatID: 0,
     }
 
     // If no name was given, default to the host name
-    if me.Name == "" {
-        me.Name = hostname
+    if me.ID.Name == "" {
+        me.ID.Name = hostname
     }
 
     // Configure the log file to be something nice
-    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.Name + " " + strconv.Itoa(int(me.ID)) + " " + bindAddress + "\x1B[0m]:")
+    log.SetPrefix("[\x1B[" + getColor(me.ID) + "m" + me.ID.Name + " " + strconv.Itoa(int(me.ID.Num)) + " " + bindAddress + "\x1B[0m]:")
     //log.SetPrefix(strconv.Itoa(int(me.ID)) + " " + bindAddress + ":")
     log.SetFlags(0)
 
-    logfd, err := os.Create(*logFile + me.Name)
+    logfd, err := os.Create(*logFile + me.ID.Name)
 
     if err != nil {
         log.Println(err)
@@ -207,10 +211,10 @@ func main() {
 
     log.SetOutput(io.MultiWriter(logfd, os.Stdout))
     log.Println("Hostname :", hostname)
-    log.Println("Name     :", me.Name)
+    log.Println("Name     :", me.ID.Name)
     log.Println("IP       :", bindAddress)
-    log.Println("Address  :", me.Address)
-    log.Println("ID       :", me.ID)
+    log.Println("Address  :", me.ID.Address)
+    log.Println("ID       :", me.ID.Num)
 
     t.JoinMember(&me)
 

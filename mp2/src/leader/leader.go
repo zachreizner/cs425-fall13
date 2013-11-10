@@ -9,13 +9,13 @@ import (
 
 const idFilename = "id.bin"
 
-func handleRequest(c net.Conn, id membertable.ID) {
+func handleRequest(c net.Conn, id membertable.IDNum) {
     defer c.Close()
     binary.Write(c, binary.BigEndian, id)
 }
 
 // Return the next ID (stored in the ID file) and write out the new next ID to the ID file.
-func IncrementIDFile() (membertable.ID, error) {
+func IncrementIDFile() (membertable.IDNum, error) {
     f, err := os.OpenFile(idFilename, os.O_RDWR | os.O_CREATE, 0)
     if err != nil {
         return 0, err
@@ -31,12 +31,12 @@ func IncrementIDFile() (membertable.ID, error) {
     // A zero file size means there was no ID file, so we should create one with the second ID
     // (which is 1) and return the starting ID (which is 1).
     if fi.Size() == 0 {
-        err = binary.Write(f, binary.BigEndian, membertable.ID(1))
+        err = binary.Write(f, binary.BigEndian, membertable.IDNum(1))
         return 0, err
     }
 
     // Read the id which we will return
-    var id membertable.ID
+    var id membertable.IDNum
     if err = binary.Read(f, binary.BigEndian, &id); err != nil {
         return 0, err
     }
@@ -51,7 +51,7 @@ func IncrementIDFile() (membertable.ID, error) {
     }
 
     // Write out what the next id should be, but do not return it
-    err = binary.Write(f, binary.BigEndian, membertable.ID(id + 1))
+    err = binary.Write(f, binary.BigEndian, membertable.IDNum(id + 1))
     return id, err
 }
 
@@ -84,7 +84,7 @@ func Run() error {
 }
 
 // Connect to the given leader and get a new ID for the group they lead.
-func RequestID(leaderAddress string) (membertable.ID, error) {
+func RequestID(leaderAddress string) (membertable.IDNum, error) {
     c, err := net.Dial("tcp", leaderAddress)
     if err != nil {
         return 0, err
@@ -92,7 +92,7 @@ func RequestID(leaderAddress string) (membertable.ID, error) {
 
     defer c.Close()
 
-    var id membertable.ID
+    var id membertable.IDNum
     if err = binary.Read(c, binary.BigEndian, &id); err != nil {
         return 0, err
     }

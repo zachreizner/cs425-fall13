@@ -10,37 +10,40 @@ import (
 const TFail = Timestamp(2 * time.Second)
 const TDrop = Timestamp(3 * TFail)
 
-type ID int32
+type IDNum int32
+
+type ID struct{
+    Num IDNum
+    Name string
+    Address string
+}
+
 type Timestamp int64 // time.Now().UnixNano()
 
 type Member struct {
     ID ID
-    Name string
-    Address string
     HeartbeatID int64
+    TimeStamp Timestamp
+    IsFailed bool
 }
 
 type Table struct {
     Members map[ID]Member
-    timeStamps map[ID]Timestamp
-    IsFailed map[ID]bool
 }
 
 // initialize the Table struct to be empty
 func (t *Table) Init() {
     t.Members = make(map[ID]Member)
-    t.timeStamps = make(map[ID]Timestamp)
-    t.IsFailed = make(map[ID]bool)
 }
 
 func (t *Table) GetTime(id ID) Timestamp {
-    return t.timeStamps[id]
+    return t.Members[id].TimeStamp
 }
 
 func (t *Table) IsDead(id ID) bool {
-    failed, exists := t.IsFailed[id]
+    mem, exists := t.Members[id]
 
-    return !exists || failed
+    return !exists || mem.IsFailed
 }
 
 // returns a timestamp for the current time when called
@@ -51,47 +54,42 @@ func StampNow() Timestamp {
 func (t *Table) JoinMember(m *Member) {
     // set m.LastHeartbeat to now
     // add m to t.Members
-    log.Println("Adding member: Id=", m.ID, ", name=", m.Name)
+    log.Println("Adding member: Id=", m.ID.Num, ", name=", m.ID.Name)
+    m.TimeStamp = StampNow()
+    m.IsFailed = false
     t.Members[m.ID] = *m
-    t.timeStamps[m.ID] = StampNow()
-    t.IsFailed[m.ID] = false
 }
 
 func (t *Table) HeartbeatMember(id ID) {
     // update the timestamp of the member of the given id
-    _, exists := t.timeStamps[id]
+    mem, exists := t.Members[id]
 
     if !exists {
         log.Println("Tried to update timestamp of a nonmember")
     }
 
-    if failed := t.IsFailed[id]; failed {
+    if mem.IsFailed {
         log.Println("Tried to update timestamp of a failed member")
     }
-
-    t.timeStamps[id] = StampNow()
+    mem.TimeStamp = StampNow()
+    t.Members[id] = mem
 }
 
 func (t *Table) dropMember(id ID) {
     delete(t.Members, id)
-    delete(t.timeStamps, id)
-    delete(t.IsFailed, id)
 }
 
 func (t *Table) RemoveDead() {
     // remove dead members
-    for id, _ := range t.Members {
-        time, exists := t.timeStamps[id]
-        if !exists {
-            log.Println("While removing dead, found a member with no timestamp.")
-        }
+    for id, mem := range t.Members {
         curTime := StampNow()
-        if !t.IsFailed[id] && curTime - time > TFail {
+        time := mem.TimeStamp
+        if !mem.IsFailed && curTime - time > TFail {
             // process not heard from, mark as failed
             log.Println("member", id, "has failed")
-            t.IsFailed[id] = true
+            mem.IsFailed = true
+            t.Members[id] = mem
         }
-
         if curTime - time > TDrop {
             t.dropMember(id)
         }
@@ -103,7 +101,7 @@ func (t *Table) ActiveMembers() []Member {
     memberArray := make([]Member, len(t.Members))
     index := 0
     for _, member := range t.Members {
-        if !t.IsFailed[member.ID] {
+        if !member.IsFailed {
             memberArray[index] = member
             index += 1
         }
@@ -123,11 +121,11 @@ func (t *Table) WriteTo(w io.Writer) error {
 func (t *Table) MergeMember(member Member) {
     myInfo, exists := t.Members[member.ID]
     if exists {
-        failed := t.IsFailed[member.ID]
+        failed := myInfo.IsFailed
         if myInfo.HeartbeatID < member.HeartbeatID  && !failed {
             myInfo.HeartbeatID = member.HeartbeatID
+            myInfo.TimeStamp = StampNow()
             t.Members[member.ID] = myInfo
-            t.timeStamps[member.ID] = StampNow()
         }
     } else {
         t.JoinMember(&member)
