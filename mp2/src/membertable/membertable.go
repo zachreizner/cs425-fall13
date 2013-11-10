@@ -22,6 +22,31 @@ type ID struct{
     Address string
 }
 
+func (id *ID) GetColor() string {
+    num := uint(id.Num) + dHash(id.Address) + dHash(id.Name)
+    switch num % 6 {
+        case 0: return "1;31";
+        case 1: return "1;32";
+        case 2: return "1;34";
+        case 3: return "1;33";
+        case 4: return "1;35";
+        case 5: return "1;36";
+    }
+    return "0";
+}
+
+// djb2 hashing algorithm
+func dHash(s string) uint {
+    hash := uint(5381)
+    var c uint
+    i := uint(0)
+    for i < uint(len(s)) {
+        hash = ((hash << 5) + hash) + c
+        i++
+    }
+    return hash
+}
+
 type Timestamp int64 // time.Now().UnixNano()
 
 type Member struct {

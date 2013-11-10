@@ -3,7 +3,6 @@ package main
 import (
     "flag"
     "io"
-    "leader"
     "log"
     "membertable"
     "net"
@@ -14,18 +13,9 @@ import (
 )
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening")
-var leaderAddress = flag.String("leader", "", "the address of the leader machine; leave unset to make this process leader")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
-
-
-func leaderProcess(fatalChan chan bool) {
-    if err := leader.Run(); err != nil {
-        log.Fatal(err)
-    }
-    fatalChan <- true
-}
 
 func getIP(hostname string) string {
     machineIP, err := net.InterfaceAddrs()
@@ -53,17 +43,6 @@ func getIP(hostname string) string {
 
 // Choose a color for a given ID
 // TODO maybe move this to membertable
-func getColor(id membertable.ID) string {
-    switch id.Num % 6 {
-        case 0: return "1;31";
-        case 1: return "1;32";
-        case 2: return "1;34";
-        case 3: return "1;33";
-        case 4: return "1;35";
-        case 5: return "1;36";
-    }
-    return "0";
-}
 
 func main() {
     flag.Parse()
@@ -102,7 +81,7 @@ func main() {
     t.Init(myID)
 
     // Configure the log file to be something nice
-    log.SetPrefix("[\x1B[" + getColor(myID) + "m" + myID.Name + " " + strconv.Itoa(int(myID.Num)) + " " + bindAddress + "\x1B[0m]:")
+    log.SetPrefix("[\x1B[" + myID.GetColor() + "m" + myID.Name + " " + strconv.Itoa(int(myID.Num)) + " " + bindAddress + "\x1B[0m]:")
     log.SetFlags(0)
 
     logfd, err := os.Create(*logFile + myID.Name)
