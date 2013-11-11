@@ -2,6 +2,8 @@ package mykv
 
 import (
     "fmt"
+    "sort"
+
     "membertable"
 )
 
@@ -16,11 +18,27 @@ type KVGraph struct {
     Connector RPCConnector
 }
 
+func (g *KVGraph) Len() int {
+    return len(g.NodeIndex)
+}
+
+func (g *KVGraph) Less(i, j int) bool {
+    return g.NodeIndex[i].Hash < g.NodeIndex[j].Hash
+}
+
+func (g *KVGraph) Swap(i, j int) {
+    tmp := g.NodeIndex[i]
+    g.NodeIndex[i] = g.NodeIndex[j]
+    g.NodeIndex[j] = tmp
+}
+
+
 func (g *KVGraph) Seed(seedAddr string) error {
     client, err := g.Connector.Connect(seedAddr)
     if err != nil {
         return err
     }
+    defer client.Close()
     var dummy int
     var members []membertable.Member
     client.Call("Table.RPCGetActiveMembers", dummy, &members)
@@ -35,7 +53,10 @@ func (g *KVGraph) Seed(seedAddr string) error {
         }
         g.NodeIndex = append(g.NodeIndex, v)
     }
-    fmt.Println(g)
+    sort.Sort(g)
+    for _, v := range g.NodeIndex {
+        fmt.Println(v.Addr, v.Hash)
+    }
     return nil
 }
 
@@ -54,6 +75,7 @@ func (g *KVGraph) Insert(kv KeyValue) error {
             if err != nil {
                 return err
             }
+            return nil
         }
     }
     return nil

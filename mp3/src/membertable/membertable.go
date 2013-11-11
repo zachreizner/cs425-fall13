@@ -39,8 +39,8 @@ func (id *ID) GetColor() string {
 func (id *ID) Hashed() uint32 {
     hasher := fnv.New32a()
     binary.Write(hasher, binary.BigEndian, id.Num)
-    binary.Write(hasher, binary.BigEndian, id.Name)
-    binary.Write(hasher, binary.BigEndian, id.Address)
+    binary.Write(hasher, binary.BigEndian, []byte(id.Name))
+    binary.Write(hasher, binary.BigEndian, []byte(id.Address))
     return hasher.Sum32()
 }
 

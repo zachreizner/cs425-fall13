@@ -17,7 +17,7 @@ func NewNode(hash HashedKey) *KVNode {
 }
 
 func (kv *KVNode) Debug() {
-    log.Println(kv.KeyValues)
+    log.Println(len(kv.KeyValues))
 }
 
 func (kv *KVNode) Insert(args *KeyValue, reply *bool) error {

@@ -135,7 +135,7 @@ func getIP(hostname string) string {
 }
 
 // Choose a color for a given ID
-func getColor(id int32) string {
+func getColor(id uint32) string {
     switch id % 6 {
         case 0: return "1;31";
         case 1: return "1;32";
@@ -186,7 +186,7 @@ func runServer() {
     addr := bindAddress + ":" + bindPort
 
     // Configure the log file to be something nice
-    log.SetPrefix("[\x1B[" + getColor(3) + "m" + name + "\x1B[0m]:")
+    log.SetPrefix("[\x1B[" + getColor(myID.Hashed()) + "m" + name + "\x1B[0m]:")
 
     logfd, err := os.Create(*logFile)
 
@@ -199,8 +199,6 @@ func runServer() {
     log.Println("Name     :", name)
     log.Println("IP       :", bindAddress)
     log.Println("Address  :", addr)
-
-
 
     go t.SendHeartbeatProcess(nil)
 
