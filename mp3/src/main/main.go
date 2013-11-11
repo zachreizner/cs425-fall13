@@ -57,17 +57,72 @@ func handleInsert(params []string, g *mykv.KVGraph) bool {
     return true
 }
 
+func handleUpdate(params []string, g *mykv.KVGraph) bool {
+    if len(params) != 3 {
+        log.Println("not enough params")
+        return true
+    }
+    keyUint, err := strconv.ParseUint(params[1], 10, 32)
+    if err != nil {
+        log.Println("invalid integer key")
+        return true
+    }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), params[2] }
+    if err := g.Update(kv); err != nil {
+        log.Println("update error: ", err)
+        return true
+    }
+    return true
+}
+
+func handleLookup(params []string, g *mykv.KVGraph) bool {
+    if len(params) != 2 {
+        log.Println("not enough params")
+        return true
+    }
+    keyUint, err := strconv.ParseUint(params[1], 10, 32)
+    if err != nil {
+        log.Println("invalid integer key")
+        return true
+    }
+    value, err := g.Lookup(mykv.Key(keyUint))
+    if err != nil {
+        log.Println("lookup error: ", err)
+        return true
+    }
+    fmt.Println(value)
+    return true
+}
+
+func handleDelete(params []string, g *mykv.KVGraph) bool {
+    if len(params) != 2 {
+        log.Println("not enough params")
+        return true
+    }
+    keyUint, err := strconv.ParseUint(params[1], 10, 32)
+    if err != nil {
+        log.Println("invalid integer key")
+        return true
+    }
+    if err = g.Delete(mykv.Key(keyUint)); err != nil {
+        log.Println("delete error: ", err)
+        return true
+    }
+    return true
+}
+
 var commandRE = []commandDispatch{
     { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleInsert },
-    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleUpdate },
-    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleLookup },
-    // { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleDelete },
+    { regexp.MustCompile(`update\s+(\S+)\s+(.*)`), handleUpdate },
+    { regexp.MustCompile(`lookup\s+(\S+)`), handleLookup },
+    { regexp.MustCompile(`delete\s+(\S+)`), handleDelete },
 }
 
 func runCommand(cmd string, g *mykv.KVGraph) bool {
     for _, command := range commandRE {
         matches := command.RE.FindStringSubmatch(cmd)
         if matches != nil {
+            g.Seed(*seedAddress)
             return command.Handler(matches, g)
         }
     }
@@ -78,7 +133,7 @@ func runCommand(cmd string, g *mykv.KVGraph) bool {
 func runInteractive(g *mykv.KVGraph) {
     if *seedAddress == "" {
         log.Println("must have machine to connect to in interactive mode")
-        //return
+        return
     }
 
     promptReader := bufio.NewReader(os.Stdin)
@@ -229,10 +284,6 @@ func main() {
 
     var g mykv.KVGraph
     g.Connector = HTTPRPCConnector{}
-
-    if *seedAddress != "" {
-        g.Seed(*seedAddress)
-    }
 
     if *interactive {
         runInteractive(&g)

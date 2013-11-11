@@ -312,7 +312,7 @@ func (t *Table) SendHeartbeatProcess(fatalChan chan bool) {
         if err != nil {
             log.Println(err)
         }
-        time.Sleep(100 * time.Millisecond)
+        time.Sleep(40 * time.Millisecond)
     }
     fatalChan <- true
 }
