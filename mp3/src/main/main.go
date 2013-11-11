@@ -202,7 +202,7 @@ func getColor(id uint32) string {
     return "0";
 }
 
-func runServer() {
+func runServer(g *mykv.KVGraph) {
     // Get the machines name
     hostname, _ := os.Hostname()
 
@@ -223,6 +223,7 @@ func runServer() {
         id = 0
     }
 
+
     // Add ourselves to the table
     myID := membertable.ID{
         Num: id,
@@ -235,8 +236,17 @@ func runServer() {
         myID.Name = hostname
     }
 
+    kv := mykv.NewNode(mykv.HashedKey(myID.Hashed()))
+
     var t membertable.Table
     t.Init(myID)
+    t.Changed = func(t *membertable.Table) {
+        log.Println("membertable changed")
+        g.SetByMembertable(t.ActiveMembers())
+        myVertex := g.FindNode(mykv.HashedKey(myID.Hashed()))
+        myVertex.LocalNode = kv
+        go g.HandleStaleKeys()
+    }
 
     addr := bindAddress + ":" + bindPort
 
@@ -257,7 +267,6 @@ func runServer() {
 
     go t.SendHeartbeatProcess(nil)
 
-    kv := mykv.NewNode(mykv.HashedKey(myID.Hashed()))
     rpc.Register(kv)
     rpc.Register(&t)
     rpc.HandleHTTP()
@@ -295,5 +304,5 @@ func main() {
         return
     }
 
-    runServer()
+    runServer(&g)
 }

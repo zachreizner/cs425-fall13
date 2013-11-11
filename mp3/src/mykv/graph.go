@@ -1,6 +1,7 @@
 package mykv
 
 import (
+    "log"
     "sort"
 
     "membertable"
@@ -41,7 +42,12 @@ func (g *KVGraph) Seed(seedAddr string) error {
     var dummy int
     var members []membertable.Member
     client.Call("Table.RPCGetActiveMembers", dummy, &members)
-    g.NodeIndex = make([]*Vertex, 0, 16)
+    g.SetByMembertable(members)
+    return nil
+}
+
+func (g *KVGraph) SetByMembertable(members []membertable.Member)  {
+    g.NodeIndex = make([]*Vertex, 0, len(members))
     for _, member := range members {
 
         v := &Vertex{
@@ -52,6 +58,14 @@ func (g *KVGraph) Seed(seedAddr string) error {
         g.NodeIndex = append(g.NodeIndex, v)
     }
     sort.Sort(g)
+}
+
+func (g *KVGraph) FindNode(k HashedKey) *Vertex {
+    for _, v := range g.NodeIndex {
+        if v.Hash == k {
+            return v
+        }
+    }
     return nil
 }
 
@@ -146,8 +160,8 @@ func (g *KVGraph) HandleStaleKeys() {
         if v.LocalNode != nil {
             prevHash := g.circularIndex(i-1).Hash
 
-            var staleKeys []KeyValue
-            v.LocalNode.StaleKeys(&prevHash, &staleKeys)
+            staleKeys := v.LocalNode.StaleKeys(prevHash)
+            log.Println("Stale: ", len(staleKeys))
 
             for _, kv := range staleKeys {
                 g.Insert(kv)

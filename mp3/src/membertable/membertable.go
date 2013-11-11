@@ -67,6 +67,7 @@ type Member struct {
 
 type Table struct {
     Members map[ID]Member
+    Changed func(t *Table)
     myID ID
 }
 
@@ -95,6 +96,12 @@ func (t *Table) IsDead(id ID) bool {
     mem, exists := t.Members[id]
 
     return !exists || mem.IsFailed
+}
+
+func (t *Table) onChange() {
+    if t.Changed != nil {
+        t.Changed(t)
+    }
 }
 
 // returns a timestamp for the current time when called
@@ -132,6 +139,7 @@ func (t *Table) dropMember(id ID) {
 
 func (t *Table) RemoveDead() {
     // remove dead members
+    failedProcess := false
     for id, mem := range t.Members {
         if mem.ID == t.myID {
             continue
@@ -143,10 +151,14 @@ func (t *Table) RemoveDead() {
             log.Println("member", id, "has failed")
             mem.IsFailed = true
             t.Members[id] = mem
+            failedProcess = true
         }
         if curTime - time > TDrop {
             t.dropMember(id)
         }
+    }
+    if failedProcess {
+        t.onChange()
     }
 }
 
@@ -183,6 +195,7 @@ func (t *Table) MergeMember(member Member) {
         }
     } else {
         t.JoinMember(&member)
+        t.onChange()
     }
 }
 

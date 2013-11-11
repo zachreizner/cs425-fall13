@@ -62,24 +62,13 @@ func (kv *KVNode) Delete(args *Key, reply *bool) error {
     return nil
 }
 
-func (kv *KVNode) StaleKeys(args *HashedKey, reply *[]KeyValue) error {
+func (kv *KVNode) StaleKeys(prevHash HashedKey) []KeyValue {
     staleKeys := make([]KeyValue, 0, 16)
     for k, v := range kv.KeyValues {
         hashedKey := k.Hashed()
-        if !hashInRange(*args, kv.maxHashedKey, hashedKey) {
+        if !hashInRange(prevHash, kv.maxHashedKey, hashedKey) {
             staleKeys = append(staleKeys, KeyValue{k,v})
         }
     }
-    *reply = staleKeys
-    return nil
-}
-
-func (kv *KVNode) DeleteStaleKeys(args *HashedKey, reply *[]KeyValue) error {
-    for k := range kv.KeyValues {
-        hashedKey := k.Hashed()
-        if !hashInRange(*args, kv.maxHashedKey, hashedKey) {
-            delete(kv.KeyValues, k)
-        }
-    }
-    return nil
+    return staleKeys
 }
