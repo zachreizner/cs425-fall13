@@ -9,6 +9,13 @@ type KVNode struct {
     maxHashedKey HashedKey
 }
 
+func NewNode(hash HashedKey) *KVNode {
+    return &KVNode{
+        KeyValues: make(map[Key]interface{}),
+        maxHashedKey: hash,
+    }
+}
+
 func (kv *KVNode) Debug() {
     log.Println(kv.KeyValues)
 }
@@ -56,7 +63,7 @@ func (kv *KVNode) Delete(args *Key, reply *bool) error {
 }
 
 func (kv *KVNode) StaleKeys(args *HashedKey, reply *[]KeyValue) error {
-    staleKeys := make([]KeyValue, 10)
+    staleKeys := make([]KeyValue, 0, 16)
     for k, v := range kv.KeyValues {
         hashedKey := k.Hashed()
         if !hashInRange(*args, kv.maxHashedKey, hashedKey) {

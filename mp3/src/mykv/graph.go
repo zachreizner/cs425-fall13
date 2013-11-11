@@ -1,5 +1,10 @@
 package mykv
 
+import (
+    "fmt"
+    "membertable"
+)
+
 type Vertex struct {
     Addr string
     Hash HashedKey
@@ -10,6 +15,30 @@ type KVGraph struct {
     NodeIndex []*Vertex
     Connector RPCConnector
 }
+
+func (g *KVGraph) Seed(seedAddr string) error {
+    client, err := g.Connector.Connect(seedAddr)
+    if err != nil {
+        return err
+    }
+    var dummy int
+    var members []membertable.Member
+    client.Call("Table.RPCGetActiveMembers", dummy, &members)
+    fmt.Println(members)
+    g.NodeIndex = make([]*Vertex, 0, 16)
+    for _, member := range members {
+
+        v := &Vertex{
+            Addr: member.ID.Address,
+            Hash: HashedKey(member.ID.Hashed()),
+            LocalNode: nil,
+        }
+        g.NodeIndex = append(g.NodeIndex, v)
+    }
+    fmt.Println(g)
+    return nil
+}
+
 
 func (g *KVGraph) Insert(kv KeyValue) error {
     hashedKey := kv.HashedKey()
@@ -44,7 +73,7 @@ func (g *KVGraph) Delete(k Key) error {
 
 func (g *KVGraph) circularIndex(idx int) *Vertex {
     if idx < 0 {
-        return g.NodeIndex[len(g.NodeIndex) - idx]
+        return g.NodeIndex[len(g.NodeIndex) + idx]
     }
     if idx > len(g.NodeIndex) {
         return g.NodeIndex[idx - len(g.NodeIndex)]

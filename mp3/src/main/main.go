@@ -26,8 +26,12 @@ var logFile = flag.String("logs", "machine.log", "the file name to store the log
 var command = flag.String("run", "", "command to run")
 var interactive = flag.Bool("interactive", false, "set to true to run interactively; cancels running a node and run command")
 
-func makeGraph() *mykv.KVGraph {
-    return nil
+type HTTPRPCConnector struct {
+
+}
+
+func (c HTTPRPCConnector) Connect(addr string) (*rpc.Client, error) {
+    return rpc.DialHTTP("tcp", addr)
 }
 
 type commandDispatch struct {
@@ -196,11 +200,28 @@ func runServer() {
     log.Println("IP       :", bindAddress)
     log.Println("Address  :", addr)
 
-    var kv mykv.KVNode
-    rpc.Register(&kv)
+
+
+    go t.SendHeartbeatProcess(nil)
+
+    kv := mykv.NewNode(mykv.HashedKey(myID.Hashed()))
+    rpc.Register(kv)
     rpc.Register(&t)
     rpc.HandleHTTP()
-    l, _ := net.Listen("tcp", *listenAddress)
+    l, err := net.Listen("tcp", *listenAddress)
+    if err != nil {
+        log.Println(err)
+        return
+    }
+
+    if *seedAddress != "" {
+        log.Printf("sending heartbeat to seed member")
+        if err = t.SendHeartbeatToAddress(*seedAddress); err != nil {
+             log.Println(err)
+            return
+        }
+    }
+
     http.Serve(l, nil)
 }
 
@@ -208,13 +229,20 @@ func main() {
     log.SetFlags(0)
     flag.Parse()
 
+    var g mykv.KVGraph
+    g.Connector = HTTPRPCConnector{}
+
+    if *seedAddress != "" {
+        g.Seed(*seedAddress)
+    }
+
     if *interactive {
-        runInteractive(nil)
+        runInteractive(&g)
         return
     }
 
     if *command != "" {
-        runCommand(*command, nil)
+        runCommand(*command, &g)
         return
     }
 
