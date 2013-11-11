@@ -20,6 +20,7 @@ import (
 )
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening to services")
+var showAddress = flag.String("show", "", "makes the server show its own information")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
@@ -32,6 +33,22 @@ type HTTPRPCConnector struct {
 
 func (c HTTPRPCConnector) Connect(addr string) (*rpc.Client, error) {
     return rpc.DialHTTP("tcp", addr)
+}
+
+type Shower struct {
+    KV *mykv.KVNode
+    Table *membertable.Table
+}
+
+func (s *Shower) Show(dummy int, reply *bool) error {
+    for k, v := range s.KV.KeyValues {
+        log.Println(k, ":", v)
+    }
+    members := s.Table.ActiveMembers()
+    for _, member := range members {
+        log.Println("Member:", member.ID)
+    }
+    return nil
 }
 
 type commandDispatch struct {
@@ -267,6 +284,9 @@ func runServer(g *mykv.KVGraph) {
 
     go t.SendHeartbeatProcess(nil)
 
+    s := Shower{kv, &t}
+
+    rpc.Register(&s)
     rpc.Register(kv)
     rpc.Register(&t)
     rpc.HandleHTTP()
@@ -290,6 +310,18 @@ func runServer(g *mykv.KVGraph) {
 func main() {
     log.SetFlags(0)
     flag.Parse()
+
+    if *showAddress != "" {
+        client, err := rpc.DialHTTP("tcp", *showAddress)
+        if err != nil {
+            log.Println(err)
+        } else {
+            dummy := 0
+            var reply bool
+            client.Call("Shower.Show", &dummy, &reply)
+        }
+        return
+    }
 
     var g mykv.KVGraph
     g.Connector = HTTPRPCConnector{}
