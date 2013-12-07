@@ -7,6 +7,8 @@ import (
     "membertable"
 )
 
+const numberOfReplicas = int(3)
+
 type Vertex struct {
     Addr string
     Hash HashedKey
@@ -69,20 +71,39 @@ func (g *KVGraph) FindNode(k HashedKey) *Vertex {
     return nil
 }
 
-func (g *KVGraph) FindVertex(k Key) *Vertex {
+func (g *KVGraph) FindVerticies(k Key) []*Vertex {
     hashedKey := k.Hashed()
+    verticies := make([]*Vertex, 0, numberOfReplicas)
+    if len(g.NodeIndex) <= numberOfReplicas {
+        verticies = append(verticies, g.NodeIndex...)
+        return verticies
+    }
     for i, v := range g.NodeIndex {
-        prevHash := g.circularIndex(i-1).Hash
+        prevHash := g.circularIndex(i- numberOfReplicas).Hash
         if hashInRange(prevHash, v.Hash, hashedKey) {
-            return v
+            verticies = append(verticies, v)
         }
     }
-    return nil
+    return verticies
 }
 
 
 func (g *KVGraph) Insert(kv KeyValue) error {
-    v := g.FindVertex(kv.Key)
+    // TODO change for quarrum
+    verts := g.FindVerticies(kv.Key)
+    log.Println("numverts: ", len(verts))
+    err := error(nil)
+    for _, v := range verts {
+        currentErr := g.insertToVert(kv, v)
+        // TODO is this the right way to handle errors?
+        if currentErr != nil {
+            err = currentErr
+        }
+    }
+    return err
+}
+
+func (g *KVGraph) insertToVert(kv KeyValue, v *Vertex) error {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
         return err
@@ -98,7 +119,19 @@ func (g *KVGraph) Insert(kv KeyValue) error {
 }
 
 func (g *KVGraph) Update(kv KeyValue) error {
-    v := g.FindVertex(kv.Key)
+    // TODO change for quarrum
+    verts := g.FindVerticies(kv.Key)
+    err := error(nil)
+    for _, v := range verts {
+        currentErr := g.insertToVert(kv, v)
+        if currentErr != nil {
+            err = currentErr
+        }
+    }
+    return err
+}
+
+func (g *KVGraph) updateVertex(kv KeyValue, v *Vertex) error {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
         return err
@@ -114,7 +147,20 @@ func (g *KVGraph) Update(kv KeyValue) error {
 }
 
 func (g *KVGraph) Lookup(k Key) (interface{}, error) {
-    v := g.FindVertex(k)
+    verts := g.FindVerticies(k)
+    var newestData interface{}
+    var err error
+    for _, v := range verts{
+        data, currentErr := g.lookupVertex(k, v)
+        // TODO check the date rather than just errors
+        if currentErr == nil {
+            newestData = data
+        }
+    }
+    return newestData, err
+}
+
+func (g *KVGraph) lookupVertex(k Key, v *Vertex) (interface{}, error) {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
         return nil, err
@@ -130,7 +176,18 @@ func (g *KVGraph) Lookup(k Key) (interface{}, error) {
 }
 
 func (g *KVGraph) Delete(k Key) error {
-    v := g.FindVertex(k)
+    verts := g.FindVerticies(k)
+    err := error(nil)
+    for _, v := range verts {
+        currentErr := g.deleteFromVertex(k, v)
+        if currentErr != nil {
+            err = currentErr
+        }
+    }
+    return err
+}
+
+func (g *KVGraph) deleteFromVertex(k Key, v *Vertex) error {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
         return err
@@ -156,9 +213,16 @@ func (g *KVGraph) circularIndex(idx int) *Vertex {
 }
 
 func (g *KVGraph) HandleStaleKeys() {
+    // TODO change to account for multiple replicas
+    // TODO maybe do repairs here?
+
+    // in this case, all members must have all keys
+    if len(g.NodeIndex) <= numberOfReplicas {
+        return
+    }
     for i, v := range g.NodeIndex {
         if v.LocalNode != nil {
-            prevHash := g.circularIndex(i-1).Hash
+            prevHash := g.circularIndex(i-numberOfReplicas).Hash // TODO what if there are few nodes in the system?
 
             staleKeys := v.LocalNode.StaleKeys(prevHash)
             log.Println("Stale: ", len(staleKeys))
