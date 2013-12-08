@@ -72,26 +72,13 @@ func (g *KVGraph) FindNode(k HashedKey) *Vertex {
 }
 
 func (g *KVGraph) FindVerticies(k Key) []*Vertex {
-    hashedKey := k.Hashed()
-    verticies := make([]*Vertex, 0, numberOfReplicas)
-    if len(g.NodeIndex) <= numberOfReplicas {
-        verticies = append(verticies, g.NodeIndex...)
-        return verticies
-    }
-    for i, v := range g.NodeIndex {
-        prevHash := g.circularIndex(i- numberOfReplicas).Hash
-        if hashInRange(prevHash, v.Hash, hashedKey) {
-            verticies = append(verticies, v)
-        }
-    }
-    return verticies
+    return verticiesHave(k, g.NodeIndex)
 }
 
 
 func (g *KVGraph) Insert(kv KeyValue) error {
     // TODO change for quarrum
     verts := g.FindVerticies(kv.Key)
-    log.Println("numverts: ", len(verts))
     err := error(nil)
     for _, v := range verts {
         currentErr := g.insertToVert(kv, v)
@@ -212,7 +199,40 @@ func (g *KVGraph) circularIndex(idx int) *Vertex {
     return g.NodeIndex[idx]
 }
 
-func (g *KVGraph) HandleStaleKeys() {
+func verticiesHave(k Key, verts []*Vertex) []*Vertex {
+    hashedKey := k.Hashed()
+    verticies := make([]*Vertex, 0, numberOfReplicas)
+    if len(verts) <= numberOfReplicas {
+        verticies = append(verticies, verts...)
+        return verticies
+    }
+    for i, v := range verts {
+        prevHash := verts[loop(i - numberOfReplicas, len(verts))].Hash
+        if hashInRange(prevHash, v.Hash, hashedKey) {
+            verticies = append(verticies, v)
+        }
+    }
+    return verticies
+}
+
+func loop(index, length int) int {
+    if index >= 0 {
+        return index % length
+    }
+    return length + (index % length)
+}
+
+func shouldHave(k Key, verts []*Vertex, h HashedKey) bool {
+    candidates := verticiesHave(k, verts)
+    for _, vert := range candidates {
+        if vert.Hash == h {
+            return true
+        }
+    }
+    return false
+}
+
+func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID) {
     // TODO change to account for multiple replicas
     // TODO maybe do repairs here?
 

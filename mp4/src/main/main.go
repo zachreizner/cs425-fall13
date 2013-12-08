@@ -260,12 +260,12 @@ func runServer(g *mykv.KVGraph) {
 
     var t membertable.Table
     t.Init(myID)
-    t.Changed = func(t *membertable.Table) {
+    t.Changed = func(t *membertable.Table, changedMembers []membertable.ID) {
         log.Println("membertable changed")
         g.SetByMembertable(t.ActiveMembers())
         myVertex := g.FindNode(mykv.HashedKey(myID.Hashed()))
         myVertex.LocalNode = kv
-        go g.HandleStaleKeys()
+        go g.HandleStaleKeys(changedMembers)
     }
 
     addr := bindAddress + ":" + bindPort
