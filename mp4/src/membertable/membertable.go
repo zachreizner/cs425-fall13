@@ -69,7 +69,7 @@ type Table struct {
     Members map[ID]Member
     // callback. Gives the current table and the list of processes added or
     // removed (by ID)
-    Changed func(t *Table, processChanged []ID)
+    Changed func(t *Table, processChanged []ID, dropped bool)
     myID ID
 }
 
@@ -100,9 +100,9 @@ func (t *Table) IsDead(id ID) bool {
     return !exists || mem.IsFailed
 }
 
-func (t *Table) onChange(processesChanged []ID) {
+func (t *Table) onChange(processesChanged []ID, dropped bool) {
     if t.Changed != nil {
-        t.Changed(t, processesChanged)
+        t.Changed(t, processesChanged, dropped)
     }
 }
 
@@ -162,7 +162,7 @@ func (t *Table) RemoveDead() {
         }
     }
     if failedProcess {
-        t.onChange(failedProcesses)
+        t.onChange(failedProcesses, true)
     }
 }
 
@@ -199,7 +199,7 @@ func (t *Table) MergeMember(member Member) {
         }
     } else {
         t.JoinMember(&member)
-        t.onChange([]ID{member.ID})
+        t.onChange([]ID{member.ID}, false)
     }
 }
 

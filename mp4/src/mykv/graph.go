@@ -232,25 +232,39 @@ func shouldHave(k Key, verts []*Vertex, h HashedKey) bool {
     return false
 }
 
-func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID) {
+func (g *KVGraph) findLocalNode() *Vertex {
+    for _, me := range g.NodeIndex {
+        if me.LocalNode != nil {
+            return me
+        }
+    }
+    return nil
+}
+
+func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID, dropped bool) {
     // TODO change to account for multiple replicas
     // TODO maybe do repairs here?
 
-    // in this case, all members must have all keys
-    if len(g.NodeIndex) <= numberOfReplicas {
-        return
+
+    me := g.findLocalNode()
+    verts := make([]*Vertex, 0, 10)
+    verts = append(verts, g.NodeIndex...)
+    if dropped {
+        for _, id := range changedMembers {
+            newVertex := Vertex{ Addr: "nowhere",
+                                 Hash : HashedKey(id.Hashed()),
+                                 LocalNode : nil }
+            verts = append(verts, &newVertex)
+        }
     }
-    for i, v := range g.NodeIndex {
-        if v.LocalNode != nil {
-            prevHash := g.circularIndex(i-numberOfReplicas).Hash // TODO what if there are few nodes in the system?
-
-            staleKeys := v.LocalNode.StaleKeys(prevHash)
-            log.Println("Stale: ", len(staleKeys))
-
-            for _, kv := range staleKeys {
-                g.Insert(kv)
+    for _, id := range changedMembers {
+        for k, v := range me.LocalNode.KeyValues {
+            if shouldHave(k, verts, HashedKey(id.Hashed())) {
+                g.Insert(KeyValue{k,v})
+            }
+            if !shouldHave(k, verts, me.LocalNode.maxHashedKey) && !dropped {
                 var success bool
-                v.LocalNode.Delete(&kv.Key, &success)
+                me.LocalNode.Delete(&k, &success)
             }
         }
     }
