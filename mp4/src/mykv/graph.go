@@ -80,6 +80,12 @@ func (g *KVGraph) FindVertex(k Key) *Vertex {
     return nil
 }
 
+func (g *KVGraph) InsertLocal(kv KeyValue) {
+    v := g.FindVertex(kv.Key)
+    if v.LocalNode != nil {
+        v.LocalNode.KeyValues[kv.Key] = kv.Value
+    }
+}
 
 func (g *KVGraph) Insert(kv KeyValue) error {
     v := g.FindVertex(kv.Key)
