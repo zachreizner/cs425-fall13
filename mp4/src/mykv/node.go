@@ -5,13 +5,13 @@ import (
 )
 
 type KVNode struct {
-    KeyValues map[Key]interface{}
+    KeyValues map[Key]KeyValue
     maxHashedKey HashedKey
 }
 
 func NewNode(hash HashedKey) *KVNode {
     return &KVNode{
-        KeyValues: make(map[Key]interface{}),
+        KeyValues: make(map[Key]KeyValue),
         maxHashedKey: hash,
     }
 }
@@ -22,28 +22,35 @@ func (kv *KVNode) Debug() {
 
 func (kv *KVNode) Insert(args *KeyValue, reply *bool) error {
     defer kv.Debug()
-    kv.KeyValues[args.Key] = args.Value
+    keyValue, ok := kv.KeyValues[args.Key]
+    if !ok {
+        kv.KeyValues[args.Key] = *args
+    } else if args.Time > keyValue.Time {
+        kv.KeyValues[args.Key] = *args
+    }
     *reply = true
     return nil
 }
 
 func (kv *KVNode) Update(args *KeyValue, reply *bool) error {
     defer kv.Debug()
-    _, ok := kv.KeyValues[args.Key]
+    keyValue, ok := kv.KeyValues[args.Key]
     if !ok {
         *reply = false
         return ErrNoKey
     }
-    kv.KeyValues[args.Key] = args.Value
+    if args.Time > keyValue.Time {
+        kv.KeyValues[args.Key] = *args
+    }
     *reply = true
     return nil
 }
 
-func (kv *KVNode) Lookup(args *Key, reply *interface{}) error {
+func (kv *KVNode) Lookup(args *Key, reply *KeyValue) error {
     defer kv.Debug()
     v, ok := kv.KeyValues[*args]
     if !ok {
-        *reply = nil
+        *reply = KeyValue{ Key:Key(0), Time: Timestamp(0), Value: "does not exist"}
         return ErrNoKey
     }
     *reply = v
@@ -64,10 +71,10 @@ func (kv *KVNode) Delete(args *Key, reply *bool) error {
 
 func (kv *KVNode) StaleKeys(prevHash HashedKey) []KeyValue {
     staleKeys := make([]KeyValue, 0, 16)
-    for k, v := range kv.KeyValues {
+    for k, keyValue := range kv.KeyValues {
         hashedKey := k.Hashed()
         if !hashInRange(prevHash, kv.maxHashedKey, hashedKey) {
-            staleKeys = append(staleKeys, KeyValue{k,v})
+            staleKeys = append(staleKeys, keyValue)
         }
     }
     return staleKeys

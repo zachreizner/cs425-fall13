@@ -82,7 +82,6 @@ func (g *KVGraph) Insert(kv KeyValue) error {
     err := error(nil)
     for _, v := range verts {
         currentErr := g.insertToVert(kv, v)
-        // TODO is this the right way to handle errors?
         if currentErr != nil {
             err = currentErr
         }
@@ -133,33 +132,40 @@ func (g *KVGraph) updateVertex(kv KeyValue, v *Vertex) error {
     return nil
 }
 
-func (g *KVGraph) Lookup(k Key) (interface{}, error) {
+func (g *KVGraph) Lookup(k Key) (*KeyValue, error) {
     verts := g.FindVerticies(k)
-    var newestData interface{}
+    var newestData *KeyValue
+    newestData = nil
     var err error
     for _, v := range verts{
         data, currentErr := g.lookupVertex(k, v)
-        // TODO check the date rather than just errors
         if currentErr == nil {
-            newestData = data
+            if newestData == nil || newestData.Time < data.Time {
+                newestData = data
+            }
         }
+    }
+
+    // read repair
+    if newestData != nil {
+        g.Insert(*newestData)
     }
     return newestData, err
 }
 
-func (g *KVGraph) lookupVertex(k Key, v *Vertex) (interface{}, error) {
+func (g *KVGraph) lookupVertex(k Key, v *Vertex) (*KeyValue, error) {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
         return nil, err
     }
     defer remoteNode.Close()
 
-    var value interface{}
-    err = remoteNode.Call("KVNode.Lookup", &k, &value)
+    var kv KeyValue
+    err = remoteNode.Call("KVNode.Lookup", &k, &kv)
     if err != nil {
         return nil, err
     }
-    return value, nil
+    return &kv, nil
 }
 
 func (g *KVGraph) Delete(k Key) error {
@@ -258,9 +264,9 @@ func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID, dropped bool)
         }
     }
     for _, id := range changedMembers {
-        for k, v := range me.LocalNode.KeyValues {
+        for k, keyValue := range me.LocalNode.KeyValues {
             if shouldHave(k, verts, HashedKey(id.Hashed())) {
-                g.Insert(KeyValue{k,v})
+                g.Insert(keyValue)
             }
             if !shouldHave(k, verts, me.LocalNode.maxHashedKey) && !dropped {
                 var success bool
@@ -285,8 +291,8 @@ func (g *KVGraph) RemoveLocalNodes() {
     // Set the node index to be only remote nodes and redistribute the keys
     g.NodeIndex = filteredNodeIndex
     for _, node := range localNodes {
-        for k, v := range node.KeyValues {
-            if err := g.Insert(KeyValue{k,v}); err != nil {
+        for _, keyValue := range node.KeyValues {
+            if err := g.Insert(keyValue); err != nil {
                 log.Printf("redis error: %v", err)
             }
         }

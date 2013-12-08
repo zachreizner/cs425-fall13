@@ -69,7 +69,7 @@ func handleInsert(params []string, g *mykv.KVGraph) bool {
         log.Println("invalid integer key")
         return true
     }
-    kv := mykv.KeyValue{ mykv.Key(keyUint), params[2] }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[2] }
     if err := g.Insert(kv); err != nil {
         log.Println("insert error: ", err)
         return true
@@ -87,7 +87,7 @@ func handleUpdate(params []string, g *mykv.KVGraph) bool {
         log.Println("invalid integer key")
         return true
     }
-    kv := mykv.KeyValue{ mykv.Key(keyUint), params[2] }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[2] }
     if err := g.Update(kv); err != nil {
         log.Println("update error: ", err)
         return true
@@ -105,12 +105,16 @@ func handleLookup(params []string, g *mykv.KVGraph) bool {
         log.Println("invalid integer key")
         return true
     }
-    value, err := g.Lookup(mykv.Key(keyUint))
+    kv, err := g.Lookup(mykv.Key(keyUint))
     if err != nil {
         log.Println("lookup error: ", err)
         return true
     }
-    fmt.Println(value)
+    if kv != nil {
+        fmt.Println(kv.Value)
+    } else {
+        fmt.Println("key does not exist")
+    }
     return true
 }
 

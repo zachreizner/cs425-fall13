@@ -4,6 +4,7 @@ import (
     "hash/fnv"
     "encoding/binary"
     "errors"
+    "time"
     "net/rpc"
 )
 
@@ -13,6 +14,12 @@ var (
 
 type RPCConnector interface {
     Connect(addr string) (*rpc.Client, error)
+}
+
+type Timestamp int64
+
+func StampNow() Timestamp{
+    return Timestamp(time.Now().UnixNano())
 }
 
 type Key uint32
@@ -26,6 +33,7 @@ func (k Key) Hashed() HashedKey {
 
 type KeyValue struct {
     Key Key
+    Time Timestamp
     Value interface{}
 }
 
