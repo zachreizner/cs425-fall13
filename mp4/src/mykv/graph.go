@@ -15,7 +15,7 @@ const numberOfReplicas = int(3)
 type ConstLvl int
 
 var (
-    ErrConstNotMet = errors.New("Command did not meet required consistancy")
+    ErrConstNotMet = errors.New("key unavailable")
 )
 
 const (
