@@ -59,18 +59,37 @@ type commandDispatch struct {
     Handler func([]string, *mykv.KVGraph) bool
 }
 
+func parseConstLevel(s string) mykv.ConstLvl {
+    if strings.EqualFold(s, "one") {
+        return mykv.One
+    }
+    if strings.EqualFold(s, "quorum") {
+        return mykv.Quorum
+    }
+    if strings.EqualFold(s, "All") {
+        return mykv.All
+    }
+    return mykv.Invalid
+
+}
 func handleInsert(params []string, g *mykv.KVGraph) bool {
-    if len(params) != 3 {
+    if len(params) != 4 {
         log.Println("not enough params")
         return true
     }
+    fmt.Println("const level", params[2])
     keyUint, err := strconv.ParseUint(params[1], 10, 32)
     if err != nil {
         log.Println("invalid integer key")
         return true
     }
-    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[2] }
-    if err := g.Insert(kv); err != nil {
+    c := parseConstLevel(params[2])
+    if c == mykv.Invalid {
+        log.Println("invalid consistancy level")
+        return true
+    }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[3] }
+    if err := g.Insert(kv, c); err != nil {
         log.Println("insert error: ", err)
         return true
     }
@@ -78,6 +97,30 @@ func handleInsert(params []string, g *mykv.KVGraph) bool {
 }
 
 func handleUpdate(params []string, g *mykv.KVGraph) bool {
+    if len(params) != 4 {
+        log.Println("not enough params")
+        return true
+    }
+    fmt.Println("const level", params[2])
+    keyUint, err := strconv.ParseUint(params[1], 10, 32)
+    if err != nil {
+        log.Println("invalid integer key")
+        return true
+    }
+    c := parseConstLevel(params[2])
+    if c == mykv.Invalid {
+        log.Println("invalid consistancy level")
+        return true
+    }
+    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[3] }
+    if err := g.Update(kv, c); err != nil {
+        log.Println("update error: ", err)
+        return true
+    }
+    return true
+}
+
+func handleLookup(params []string, g *mykv.KVGraph) bool {
     if len(params) != 3 {
         log.Println("not enough params")
         return true
@@ -87,25 +130,12 @@ func handleUpdate(params []string, g *mykv.KVGraph) bool {
         log.Println("invalid integer key")
         return true
     }
-    kv := mykv.KeyValue{ mykv.Key(keyUint), mykv.StampNow(), params[2] }
-    if err := g.Update(kv); err != nil {
-        log.Println("update error: ", err)
+    c := parseConstLevel(params[2])
+    if c == mykv.Invalid {
+        log.Println("invalid consistancy level")
         return true
     }
-    return true
-}
-
-func handleLookup(params []string, g *mykv.KVGraph) bool {
-    if len(params) != 2 {
-        log.Println("not enough params")
-        return true
-    }
-    keyUint, err := strconv.ParseUint(params[1], 10, 32)
-    if err != nil {
-        log.Println("invalid integer key")
-        return true
-    }
-    kv, err := g.Lookup(mykv.Key(keyUint))
+    kv, err := g.Lookup(mykv.Key(keyUint), c)
     if err != nil {
         log.Println("lookup error: ", err)
         return true
@@ -119,7 +149,7 @@ func handleLookup(params []string, g *mykv.KVGraph) bool {
 }
 
 func handleDelete(params []string, g *mykv.KVGraph) bool {
-    if len(params) != 2 {
+    if len(params) != 3 {
         log.Println("not enough params")
         return true
     }
@@ -128,7 +158,12 @@ func handleDelete(params []string, g *mykv.KVGraph) bool {
         log.Println("invalid integer key")
         return true
     }
-    if err = g.Delete(mykv.Key(keyUint)); err != nil {
+    c := parseConstLevel(params[2])
+    if c == mykv.Invalid {
+        log.Println("invalid consistancy level")
+        return true
+    }
+    if err = g.Delete(mykv.Key(keyUint), c); err != nil {
         log.Println("delete error: ", err)
         return true
     }
@@ -136,10 +171,10 @@ func handleDelete(params []string, g *mykv.KVGraph) bool {
 }
 
 var commandRE = []commandDispatch{
-    { regexp.MustCompile(`insert\s+(\S+)\s+(.*)`), handleInsert },
-    { regexp.MustCompile(`update\s+(\S+)\s+(.*)`), handleUpdate },
-    { regexp.MustCompile(`lookup\s+(\S+)`), handleLookup },
-    { regexp.MustCompile(`delete\s+(\S+)`), handleDelete },
+    { regexp.MustCompile(`insert\s+(\S+)\s+(\S+)\s+(.*)`), handleInsert },
+    { regexp.MustCompile(`update\s+(\S+)\s(\S+)\s+(.*)`), handleUpdate },
+    { regexp.MustCompile(`lookup\s+(\S+)\s(\S+)`), handleLookup },
+    { regexp.MustCompile(`delete\s+(\S+)\s(\S+)`), handleDelete },
 }
 
 func runCommand(cmd string, g *mykv.KVGraph) bool {
@@ -315,6 +350,7 @@ func runServer(g *mykv.KVGraph) {
     var exitMutex sync.Mutex // Used to prevent exit while handling signal
     sigChan := make(chan os.Signal, 0)
     signal.Notify(sigChan, syscall.SIGTSTP)
+
     go func() {
         sig := <-sigChan
         exitMutex.Lock()

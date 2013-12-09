@@ -3,11 +3,48 @@ package mykv
 import (
     "log"
     "sort"
+    "time"
+    "errors"
+    "math/rand"
 
     "membertable"
 )
 
 const numberOfReplicas = int(3)
+
+type ConstLvl int
+
+var (
+    ErrConstNotMet = errors.New("Command did not meet required consistancy")
+)
+
+const (
+    One ConstLvl = iota
+    Quorum
+    All
+    Invalid
+)
+
+func (g *KVGraph) numRequired(c ConstLvl) int {
+    numRequired := int(0)
+    if c == One {
+        numRequired = 1
+    }
+
+    if c == Quorum {
+        numRequired = (numberOfReplicas / 2) + 1
+    }
+
+    if c == All {
+        numRequired = numberOfReplicas
+    }
+
+    if numRequired > len(g.NodeIndex){
+        numRequired = len(g.NodeIndex)
+    }
+
+    return numRequired
+}
 
 type Vertex struct {
     Addr string
@@ -76,14 +113,22 @@ func (g *KVGraph) FindVerticies(k Key) []*Vertex {
 }
 
 
-func (g *KVGraph) Insert(kv KeyValue) error {
+func (g *KVGraph) Insert(kv KeyValue, c ConstLvl) error {
     // TODO change for quarrum
     verts := g.FindVerticies(kv.Key)
     err := error(nil)
+    succes := 0
+    required := g.numRequired(c)
+    log.Println("required:", required)
     for _, v := range verts {
         currentErr := g.insertToVert(kv, v)
         if currentErr != nil {
             err = currentErr
+        } else {
+            succes++
+        }
+        if succes >= required {
+            return err
         }
     }
     return err
@@ -104,7 +149,7 @@ func (g *KVGraph) insertToVert(kv KeyValue, v *Vertex) error {
     return nil
 }
 
-func (g *KVGraph) Update(kv KeyValue) error {
+func (g *KVGraph) Update(kv KeyValue, c ConstLvl) error {
     // TODO change for quarrum
     verts := g.FindVerticies(kv.Key)
     err := error(nil)
@@ -132,25 +177,32 @@ func (g *KVGraph) updateVertex(kv KeyValue, v *Vertex) error {
     return nil
 }
 
-func (g *KVGraph) Lookup(k Key) (*KeyValue, error) {
+func (g *KVGraph) Lookup(k Key, c ConstLvl) (*KeyValue, error) {
     verts := g.FindVerticies(k)
     var newestData *KeyValue
     newestData = nil
     var err error
+    succes := int(0)
     for _, v := range verts{
         data, currentErr := g.lookupVertex(k, v)
         if currentErr == nil {
+            succes++
             if newestData == nil || newestData.Time < data.Time {
                 newestData = data
             }
         }
     }
+    log.Println("required:", g.numRequired(c))
 
     // read repair
     if newestData != nil {
-        g.Insert(*newestData)
+        g.Insert(*newestData, All)
     }
-    return newestData, err
+    if succes >= g.numRequired(c) {
+        return newestData, err
+    } else {
+        return nil, ErrConstNotMet
+    }
 }
 
 func (g *KVGraph) lookupVertex(k Key, v *Vertex) (*KeyValue, error) {
@@ -168,7 +220,7 @@ func (g *KVGraph) lookupVertex(k Key, v *Vertex) (*KeyValue, error) {
     return &kv, nil
 }
 
-func (g *KVGraph) Delete(k Key) error {
+func (g *KVGraph) Delete(k Key, c ConstLvl) error {
     verts := g.FindVerticies(k)
     err := error(nil)
     for _, v := range verts {
@@ -266,13 +318,33 @@ func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID, dropped bool)
     for _, id := range changedMembers {
         for k, keyValue := range me.LocalNode.KeyValues {
             if shouldHave(k, verts, HashedKey(id.Hashed())) {
-                g.Insert(keyValue)
+                g.Insert(keyValue, All)
             }
             if !shouldHave(k, verts, me.LocalNode.maxHashedKey) && !dropped {
                 var success bool
                 me.LocalNode.Delete(&k, &success)
             }
         }
+    }
+}
+
+func (g *KVGraph) RandomRepair() {
+    local := g.findLocalNode()
+    index := rand.Int() % len(local.LocalNode.KeyValues)
+    i := 0
+    for _, kv := range(local.LocalNode.KeyValues) {
+        if i == index {
+            g.Insert(kv, All)
+            return
+        }
+        i++
+    }
+}
+
+func (g *KVGraph) RandomRepairProcess() {
+    for {
+        g.RandomRepair()
+        time.Sleep(100 * time.Millisecond)
     }
 }
 
@@ -292,7 +364,7 @@ func (g *KVGraph) RemoveLocalNodes() {
     g.NodeIndex = filteredNodeIndex
     for _, node := range localNodes {
         for _, keyValue := range node.KeyValues {
-            if err := g.Insert(keyValue); err != nil {
+            if err := g.Insert(keyValue, All); err != nil {
                 log.Printf("redis error: %v", err)
             }
         }
