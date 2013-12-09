@@ -12,6 +12,7 @@ import (
     "os"
     "os/signal"
     "regexp"
+    "runtime"
     "strconv"
     "strings"
     "sync"
@@ -20,15 +21,17 @@ import (
 
     "mykv"
     "membertable"
+    "movie"
 )
 
 var listenAddress = flag.String("bind", ":7777", "the address for listening to services")
-var showAddress = flag.String("show", "", "makes the server show its own information")
 var seedAddress = flag.String("seed", "", "the address of some machine to grab the inital membertable from")
 var machineName = flag.String("name", "", "the name of this machine")
 var logFile = flag.String("logs", "machine.log", "the file name to store the log in")
 var command = flag.String("run", "", "command to run")
 var interactive = flag.Bool("interactive", false, "set to true to run interactively; cancels running a node and run command")
+var movieInteractive = flag.Bool("movie", false, "set to true to run interactively in movie search mode")
+var loadMovie = flag.Bool("load", false, "set to true to cause the machines to load the movie index")
 
 type HTTPRPCConnector struct {
 
@@ -38,20 +41,66 @@ func (c HTTPRPCConnector) Connect(addr string) (*rpc.Client, error) {
     return rpc.DialHTTP("tcp", addr)
 }
 
-type Shower struct {
-    KV *mykv.KVNode
-    Table *membertable.Table
+type Controller struct {
+    g *mykv.KVGraph
 }
 
-func (s *Shower) Show(dummy int, reply *bool) error {
-    for k, v := range s.KV.KeyValues {
-        log.Println(k, ":", v)
-    }
-    members := s.Table.ActiveMembers()
-    for _, member := range members {
-        log.Println("Member:", member.ID)
-    }
+func (c *Controller) LoadMovies(args *int, reply *bool) error {
+    go func() {
+        entriesFile, err := os.Open("entries.bin")
+        if err != nil {
+            log.Printf("error opening entries file: %v", err)
+            return
+        }
+        defer entriesFile.Close()
+        if err := movie.LoadEntries(c.g, entriesFile); err != nil {
+            log.Printf("error loading entries: %v", err)
+            return
+        }
+    }()
     return nil
+}
+
+func loadMovies() {
+    client, err := rpc.DialHTTP("tcp", *seedAddress)
+    if err != nil {
+        log.Printf("error connecting to seed: %v", err)
+        return
+    }
+
+    var dummy int
+    var members []membertable.Member
+    client.Call("Table.RPCGetActiveMembers", dummy, &members)
+    client.Close()
+
+
+    memberDoneChan := make(chan int, 10)
+    memberDone := func() {
+        memberDoneChan <- 1
+    }
+    membersRunning := 0
+    for _, member := range members {
+        membersRunning += 1
+        go func(addr string) {
+            defer memberDone()
+            remoteNode, err := rpc.DialHTTP("tcp", addr)
+            if err != nil {
+                log.Printf("error connecting to node: %v", err)
+                return
+            }
+            var reply bool
+            err = remoteNode.Call("Controller.LoadMovies", &dummy, &reply)
+            remoteNode.Close()
+            if err != nil {
+                log.Printf("error calling node: %v", err)
+                return
+            }
+        }(member.ID.Address)
+    }
+    for membersRunning > 0 {
+        <- memberDoneChan
+        membersRunning -= 1
+    }
 }
 
 type commandDispatch struct {
@@ -295,7 +344,7 @@ func runServer(g *mykv.KVGraph) {
         myID.Name = hostname
     }
 
-    kv := mykv.NewNode(mykv.HashedKey(myID.Hashed()))
+    localNode := mykv.NewNode(mykv.HashedKey(myID.Hashed()))
 
     var t membertable.Table
     t.Init(myID)
@@ -303,7 +352,7 @@ func runServer(g *mykv.KVGraph) {
         log.Println("membertable changed")
         g.SetByMembertable(t.ActiveMembers())
         myVertex := g.FindNode(mykv.HashedKey(myID.Hashed()))
-        myVertex.LocalNode = kv
+        myVertex.LocalNode = localNode
         go g.HandleStaleKeys(changedMembers, dropped)
     }
 
@@ -326,10 +375,10 @@ func runServer(g *mykv.KVGraph) {
 
     go t.SendHeartbeatProcess(nil)
 
-    s := Shower{kv, &t}
+    s := Controller{g}
 
     rpc.Register(&s)
-    rpc.Register(kv)
+    rpc.Register(localNode)
     rpc.Register(&t)
     rpc.HandleHTTP()
     l, err := net.Listen("tcp", *listenAddress)
@@ -345,6 +394,15 @@ func runServer(g *mykv.KVGraph) {
             return
         }
     }
+
+    // Setup a signal for showing the last 10 reads/writes
+    usrSigChan := make(chan os.Signal, 0)
+    signal.Notify(usrSigChan, syscall.SIGUSR1)
+    go func() {
+        for _ = range usrSigChan {
+            localNode.Show()
+        }
+    }()
 
     // Setup some so we can exit clean on SIGTSTP
     var exitMutex sync.Mutex // Used to prevent exit while handling signal
@@ -366,23 +424,30 @@ func runServer(g *mykv.KVGraph) {
 }
 
 func main() {
+    runtime.GOMAXPROCS(2)
     log.SetFlags(0)
     flag.Parse()
 
-    if *showAddress != "" {
-        client, err := rpc.DialHTTP("tcp", *showAddress)
-        if err != nil {
-            log.Println(err)
-        } else {
-            dummy := 0
-            var reply bool
-            client.Call("Shower.Show", &dummy, &reply)
+    var g mykv.KVGraph
+    g.Connector = HTTPRPCConnector{}
+
+    if *loadMovie {
+        if *seedAddress == "" {
+            log.Println("must have machine to connect to load movies")
+            return
         }
+        loadMovies()
         return
     }
 
-    var g mykv.KVGraph
-    g.Connector = HTTPRPCConnector{}
+    if *movieInteractive {
+        if *seedAddress == "" {
+            log.Println("must have machine to connect to in movie search mode")
+            return
+        }
+        movie.RunInteractive(&g, *seedAddress)
+        return
+    }
 
     if *interactive {
         runInteractive(&g)

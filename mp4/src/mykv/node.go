@@ -2,11 +2,16 @@ package mykv
 
 import (
     "log"
+    "sync"
 )
 
 type KVNode struct {
     KeyValues map[Key]KeyValue
+
+    recentReads [10]KeyValue
+    recentWrites [10]KeyValue
     maxHashedKey HashedKey
+    nodeMutex sync.Mutex
 }
 
 func NewNode(hash HashedKey) *KVNode {
@@ -17,10 +22,29 @@ func NewNode(hash HashedKey) *KVNode {
 }
 
 func (kv *KVNode) Debug() {
-    log.Println(len(kv.KeyValues))
+    if len(kv.KeyValues) % 10000 == 0 {
+        log.Println(len(kv.KeyValues))
+    }
+}
+
+func (kv *KVNode) Show() {
+    kv.nodeMutex.Lock()
+    defer kv.nodeMutex.Unlock()
+
+    log.Println("Reads:")
+    for i, entry := range kv.recentReads {
+        log.Printf("[%v]    %v", i, entry)
+    }
+
+    log.Println("Writes:")
+    for i, entry := range kv.recentWrites {
+        log.Printf("[%v]    %v", i, entry)
+    }
 }
 
 func (kv *KVNode) Insert(args *KeyValue, reply *bool) error {
+    kv.nodeMutex.Lock()
+    defer kv.nodeMutex.Unlock()
     defer kv.Debug()
     keyValue, ok := kv.KeyValues[args.Key]
     if !ok {
@@ -33,6 +57,8 @@ func (kv *KVNode) Insert(args *KeyValue, reply *bool) error {
 }
 
 func (kv *KVNode) Update(args *KeyValue, reply *bool) error {
+    kv.nodeMutex.Lock()
+    defer kv.nodeMutex.Unlock()
     defer kv.Debug()
     keyValue, ok := kv.KeyValues[args.Key]
     if !ok {
@@ -47,6 +73,8 @@ func (kv *KVNode) Update(args *KeyValue, reply *bool) error {
 }
 
 func (kv *KVNode) Lookup(args *Key, reply *KeyValue) error {
+    kv.nodeMutex.Lock()
+    defer kv.nodeMutex.Unlock()
     defer kv.Debug()
     v, ok := kv.KeyValues[*args]
     if !ok {
@@ -58,6 +86,8 @@ func (kv *KVNode) Lookup(args *Key, reply *KeyValue) error {
 }
 
 func (kv *KVNode) Delete(args *Key, reply *bool) error {
+    kv.nodeMutex.Lock()
+    defer kv.nodeMutex.Unlock()
     defer kv.Debug()
     _, ok := kv.KeyValues[*args]
     if !ok {

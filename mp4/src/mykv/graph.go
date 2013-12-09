@@ -134,6 +134,13 @@ func (g *KVGraph) Insert(kv KeyValue, c ConstLvl) error {
     return err
 }
 
+func (g *KVGraph) InsertLocal(kv KeyValue) {
+    v := g.findLocalNode()
+    if v.LocalNode != nil {
+        v.LocalNode.KeyValues[kv.Key] = kv
+    }
+}
+
 func (g *KVGraph) insertToVert(kv KeyValue, v *Vertex) error {
     remoteNode, err := g.Connector.Connect(v.Addr)
     if err != nil {
