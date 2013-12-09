@@ -126,7 +126,6 @@ func handleInsert(params []string, g *mykv.KVGraph) bool {
         log.Println("not enough params")
         return true
     }
-    fmt.Println("const level", params[2])
     keyUint, err := strconv.ParseUint(params[1], 10, 32)
     if err != nil {
         log.Println("invalid integer key")
@@ -150,7 +149,6 @@ func handleUpdate(params []string, g *mykv.KVGraph) bool {
         log.Println("not enough params")
         return true
     }
-    fmt.Println("const level", params[2])
     keyUint, err := strconv.ParseUint(params[1], 10, 32)
     if err != nil {
         log.Println("invalid integer key")
@@ -394,6 +392,8 @@ func runServer(g *mykv.KVGraph) {
             return
         }
     }
+
+    go g.RandomRepairProcess()
 
     // Setup a signal for showing the last 10 reads/writes
     usrSigChan := make(chan os.Signal, 0)

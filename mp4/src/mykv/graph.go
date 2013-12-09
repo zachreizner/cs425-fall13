@@ -119,7 +119,6 @@ func (g *KVGraph) Insert(kv KeyValue, c ConstLvl) error {
     err := error(nil)
     succes := 0
     required := g.numRequired(c)
-    log.Println("required:", required)
     for _, v := range verts {
         currentErr := g.insertToVert(kv, v)
         if currentErr != nil {
@@ -199,7 +198,6 @@ func (g *KVGraph) Lookup(k Key, c ConstLvl) (*KeyValue, error) {
             }
         }
     }
-    log.Println("required:", g.numRequired(c))
 
     // read repair
     if newestData != nil {
@@ -312,6 +310,9 @@ func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID, dropped bool)
 
 
     me := g.findLocalNode()
+    if me == nil {
+        return
+    }
     verts := make([]*Vertex, 0, 10)
     verts = append(verts, g.NodeIndex...)
     if dropped {
@@ -337,6 +338,12 @@ func (g *KVGraph) HandleStaleKeys(changedMembers []membertable.ID, dropped bool)
 
 func (g *KVGraph) RandomRepair() {
     local := g.findLocalNode()
+    if local == nil {
+        return
+    }
+    if len(local.LocalNode.KeyValues) == 0 {
+        return
+    }
     index := rand.Int() % len(local.LocalNode.KeyValues)
     i := 0
     for _, kv := range(local.LocalNode.KeyValues) {
