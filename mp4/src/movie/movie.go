@@ -48,12 +48,14 @@ func RunInteractive(g *mykv.KVGraph, seedAddress string) {
         keyvalue, err := g.Lookup(HashTitle(cmd), mykv.All)
         if err != nil {
             fmt.Println(err)
+            continue
         }
         v := keyvalue.Value
 
         index, ok := v.([]Entry)
         if !ok {
             fmt.Println("invalid value", v)
+            continue
         }
 
         for i, entry := range index {
