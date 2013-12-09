@@ -228,7 +228,6 @@ func runCommand(cmd string, g *mykv.KVGraph) bool {
     for _, command := range commandRE {
         matches := command.RE.FindStringSubmatch(cmd)
         if matches != nil {
-            g.Seed(*seedAddress)
             return command.Handler(matches, g)
         }
     }
@@ -256,6 +255,7 @@ func runInteractive(g *mykv.KVGraph) {
             continue
         }
 
+        g.Seed(*seedAddress)
         queryStartTime := time.Now()
 
         if !runCommand(cmd, g) {
@@ -455,7 +455,10 @@ func main() {
     }
 
     if *command != "" {
+        queryStartTime := time.Now()
+        g.Seed(*seedAddress)
         runCommand(*command, &g)
+        fmt.Println(uint64(time.Since(queryStartTime)))
         return
     }
 

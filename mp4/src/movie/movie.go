@@ -9,6 +9,7 @@ import (
     "io"
     "log"
     "os"
+    "runtime"
     "strings"
     "time"
     "mykv"
@@ -91,6 +92,9 @@ func LoadEntries(g *mykv.KVGraph, r io.Reader) error {
             entries = append(entries, Entry{string(entryTitle), string(entryYear)})
         }
         g.InsertLocal(mykv.KeyValue{k, mykv.StampNow(), entries})
+        if keywordIndex % 100 == 0 {
+            runtime.Gosched()
+        }
         if keywordIndex % 10000 == 0 {
             log.Printf("%v%%", float64(keywordIndex) / float64(keywordCount) * 100.0)
         }

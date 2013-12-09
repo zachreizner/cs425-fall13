@@ -8,6 +8,8 @@ import (
 type KVNode struct {
     KeyValues map[Key]KeyValue
 
+    readIndex int
+    writeIndex int
     recentReads [10]KeyValue
     recentWrites [10]KeyValue
     maxHashedKey HashedKey
@@ -32,13 +34,15 @@ func (kv *KVNode) Show() {
     defer kv.nodeMutex.Unlock()
 
     log.Println("Reads:")
-    for i, entry := range kv.recentReads {
-        log.Printf("[%v]    %v", i, entry)
+    for i := 0; i < 10; i++ {
+        entryIndex := (kv.readIndex + i) % 10
+        log.Printf("[%v]    %v", i, kv.recentReads[entryIndex])
     }
 
     log.Println("Writes:")
-    for i, entry := range kv.recentWrites {
-        log.Printf("[%v]    %v", i, entry)
+    for i := 0; i < 10; i++ {
+        entryIndex := (kv.writeIndex + i) % 10
+        log.Printf("[%v]    %v", i, kv.recentWrites[entryIndex])
     }
 }
 
@@ -52,6 +56,11 @@ func (kv *KVNode) Insert(args *KeyValue, reply *bool) error {
     } else if args.Time > keyValue.Time {
         kv.KeyValues[args.Key] = *args
     }
+    kv.writeIndex -= 1
+    if kv.writeIndex < 0 {
+        kv.writeIndex = 9
+    }
+    kv.recentWrites[kv.writeIndex] = *args
     *reply = true
     return nil
 }
@@ -68,6 +77,11 @@ func (kv *KVNode) Update(args *KeyValue, reply *bool) error {
     if args.Time > keyValue.Time {
         kv.KeyValues[args.Key] = *args
     }
+    kv.writeIndex -= 1
+    if kv.writeIndex < 0 {
+        kv.writeIndex = 9
+    }
+    kv.recentWrites[kv.writeIndex] = *args
     *reply = true
     return nil
 }
@@ -81,6 +95,11 @@ func (kv *KVNode) Lookup(args *Key, reply *KeyValue) error {
         *reply = KeyValue{ Key:Key(0), Time: Timestamp(0), Value: "does not exist"}
         return ErrNoKey
     }
+    kv.readIndex -= 1
+    if kv.readIndex < 0 {
+        kv.readIndex = 9
+    }
+    kv.recentReads[kv.readIndex] = v
     *reply = v
     return nil
 }
